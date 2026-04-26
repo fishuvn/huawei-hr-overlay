@@ -125,9 +125,10 @@ Check **Simulate** in the app to generate realistic fake BPM values — great fo
 
 Any device implementing the standard **BLE GATT Heart Rate Service (0x180D)** will work:
 
-- Huawei Watch GT2 / GT3 / GT3 Pro / GT4
-- Huawei Watch Fit / Fit 2 / Fit 3
-- Huawei Band 6 / 7 / 8 / 9
+- Huawei Watch GT2 / GT2e / GT2 Pro / GT3 / GT3 Pro / GT3 SE / GT4 / GT5 / GT5 Pro / GT6 / GT6 Pro
+- Huawei Watch Ultimate / Ultimate Design / Ultimate 2
+- Huawei Watch Fit / Fit Elegant / Fit 2 / Fit 3 / Fit 4 / Fit 4 Pro / Fit 5
+- Huawei Band 6 / 7 / 7 Pro / 8 / 9 / 10 / 10 Pro / 11 / 11 Pro
 - Any standard BLE HR chest strap (Polar H10, Wahoo TICKR, etc.)
 
 ---
