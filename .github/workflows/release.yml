@@ -1,7 +1,10 @@
 name: Release
 
 on:
+  workflow_dispatch: # Dòng này cho phép bấm nút chạy bằng tay
   push:
+    branches:
+      - main
     tags:
       - "v*.*.*" # Kích hoạt khi push tag như v1.0.0
 
