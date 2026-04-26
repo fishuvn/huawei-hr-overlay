@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Heart Rate Overlay</title>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: transparent;
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── Main Widget Card ── */
+  .widget {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 24px 14px 18px;
+    background: rgba(10, 10, 20, 0.72);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 80, 100, 0.35);
+    border-radius: 18px;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.05) inset,
+      0 8px 32px rgba(0,0,0,0.6),
+      0 0 24px rgba(255, 60, 80, 0.15);
+    transition: opacity 0.4s ease;
+    min-width: 160px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Glow shimmer on card */
+  .widget::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 18px;
+    background: linear-gradient(
+      135deg,
+      rgba(255,80,100,0.08) 0%,
+      transparent 60%,
+      rgba(255,40,70,0.05) 100%
+    );
+    pointer-events: none;
+  }
+
+  .widget.disconnected {
+    opacity: 0.55;
+    border-color: rgba(120,120,140,0.3);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+
+  /* ── Heart Icon ── */
+  .heart-wrap {
+    position: relative;
+    width: 46px;
+    height: 46px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .heart-icon {
+    font-size: 36px;
+    line-height: 1;
+    filter: drop-shadow(0 0 8px rgba(255, 60, 80, 0.8));
+    transform-origin: center;
+    display: inline-block;
+    animation: heartbeat 1s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  /* Ripple pulse ring around heart */
+  .heart-ring {
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 60, 80, 0.5);
+    animation: ring-pulse 1s ease-out infinite;
+    will-change: transform, opacity;
+  }
+  .heart-ring.ring2 {
+    animation-delay: 0.25s;
+    border-color: rgba(255, 60, 80, 0.25);
+  }
+
+  /* Heartbeat: scale driven by JS via CSS custom property --bpm */
+  @keyframes heartbeat {
+    0%   { transform: scale(1); }
+    14%  { transform: scale(1.22); }
+    28%  { transform: scale(1); }
+    42%  { transform: scale(1.14); }
+    70%  { transform: scale(1); }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes ring-pulse {
+    0%   { transform: scale(0.85); opacity: 0.8; }
+    100% { transform: scale(1.8); opacity: 0; }
+  }
+
+  /* ── BPM Text Area ── */
+  .bpm-area {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .bpm-value {
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1;
+    background: linear-gradient(135deg, #ff5070 0%, #ff2a4a 50%, #ff8090 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -2px;
+    transition: transform 0.12s cubic-bezier(0.34,1.56,0.64,1);
+    filter: drop-shadow(0 0 12px rgba(255,60,80,0.5));
+    font-variant-numeric: tabular-nums;
+  }
+
+  .bpm-value.bump {
+    transform: scale(1.08);
+  }
+
+  .bpm-unit {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: rgba(255, 150, 160, 0.7);
+    margin-top: 1px;
+  }
+
+  /* ── Status Dot ── */
+  .status-dot {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #22dd55;
+    box-shadow: 0 0 6px #22dd55;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+
+  .disconnected .status-dot {
+    background: #888;
+    box-shadow: none;
+  }
+
+  /* ── Disconnected state text ── */
+  .no-signal {
+    font-size: 12px;
+    color: rgba(200,200,220,0.5);
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── Zone color themes (applied to heart + bpm dynamically) ── */
+  .zone-rest    .heart-icon { filter: drop-shadow(0 0 8px rgba(60,140,255,0.8)); }
+  .zone-fat     .heart-icon { filter: drop-shadow(0 0 8px rgba(60,220,180,0.8)); }
+  .zone-cardio  .heart-icon { filter: drop-shadow(0 0 8px rgba(255,200,50,0.8)); }
+  .zone-peak    .heart-icon { filter: drop-shadow(0 0 8px rgba(255,80,40,0.9)); }
+
+</style>
+<!-- Google Fonts: Inter -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="widget disconnected" id="widget">
+  <div class="status-dot" id="statusDot"></div>
+  <div class="heart-wrap">
+    <div class="heart-ring"></div>
+    <div class="heart-ring ring2"></div>
+    <span class="heart-icon" id="heartIcon">❤️</span>
+  </div>
+  <div class="bpm-area">
+    <div class="bpm-value" id="bpmValue">--</div>
+    <div class="bpm-unit">BPM</div>
+  </div>
+</div>
+
+<script>
+// ── Configuration ──────────────────────────────────────────────────
+const WS_URL   = 'ws://localhost:8765';
+const RECONNECT_DELAY_MS = 3000;
+
+// ── DOM refs ───────────────────────────────────────────────────────
+const widget    = document.getElementById('widget');
+const bpmValue  = document.getElementById('bpmValue');
+const heartIcon = document.getElementById('heartIcon');
+
+// ── State ─────────────────────────────────────────────────────────
+let ws        = null;
+let currentBpm = 0;
+let animFrameId = null;
+
+// ── WebSocket connection ───────────────────────────────────────────
+function connect() {
+  ws = new WebSocket(WS_URL);
+
+  ws.addEventListener('open', () => {
+    setConnected(true);
+    console.log('[HR Overlay] WebSocket connected');
+  });
+
+  ws.addEventListener('message', (evt) => {
+    try {
+      const data = JSON.parse(evt.data);
+      if (typeof data.bpm === 'number' && data.bpm > 0) {
+        updateBpm(data.bpm);
+      }
+    } catch(e) { /* ignore malformed */ }
+  });
+
+  ws.addEventListener('close', () => {
+    setConnected(false);
+    setTimeout(connect, RECONNECT_DELAY_MS);
+  });
+
+  ws.addEventListener('error', () => {
+    ws.close();
+  });
+}
+
+// ── Update display ─────────────────────────────────────────────────
+function updateBpm(bpm) {
+  const changed = bpm !== currentBpm;
+  currentBpm = bpm;
+
+  bpmValue.textContent = bpm;
+
+  if (changed) {
+    // Micro-animation: bump scale on new value
+    bpmValue.classList.remove('bump');
+    void bpmValue.offsetWidth; // reflow trigger
+    bpmValue.classList.add('bump');
+    setTimeout(() => bpmValue.classList.remove('bump'), 200);
+  }
+
+  // Adjust heart animation speed based on BPM
+  // 60 BPM → 1.0s; 120 BPM → 0.5s; 180 BPM → 0.33s
+  const beatDuration = Math.max(0.3, 60 / bpm);
+  heartIcon.style.animationDuration = `${beatDuration}s`;
+
+  // Adjust ring pulse speed to match
+  document.querySelectorAll('.heart-ring').forEach(r => {
+    r.style.animationDuration = `${beatDuration}s`;
+  });
+
+  // Zone coloring
+  updateZone(bpm);
+}
+
+function updateZone(bpm) {
+  const zones = ['zone-rest', 'zone-fat', 'zone-cardio', 'zone-peak'];
+  widget.classList.remove(...zones);
+  if      (bpm < 100) widget.classList.add('zone-rest');
+  else if (bpm < 130) widget.classList.add('zone-fat');
+  else if (bpm < 160) widget.classList.add('zone-cardio');
+  else                widget.classList.add('zone-peak');
+}
+
+function setConnected(connected) {
+  if (connected) {
+    widget.classList.remove('disconnected');
+  } else {
+    widget.classList.add('disconnected');
+    bpmValue.textContent = '--';
+    currentBpm = 0;
+  }
+}
+
+// ── Boot ───────────────────────────────────────────────────────────
+connect();
+</script>
+</body>
+</html>
