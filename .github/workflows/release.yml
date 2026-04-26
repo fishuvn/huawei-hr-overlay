@@ -3,10 +3,10 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'   # triggers on tags like v1.0.0, v1.2.3
+      - "v*.*.*" # Kích hoạt khi push tag như v1.0.0
 
 permissions:
-  contents: write  # needed to create GitHub Releases
+  contents: write # Quyền tạo Release và upload Assets
 
 jobs:
   build-and-release:
@@ -14,7 +14,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      # ── Checkout ──────────────────────────────────────────────
+      # ── Checkout code ──────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -22,20 +22,22 @@ jobs:
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: "8.0.x"
 
-      # ── Restore dependencies ───────────────────────────────────
-      - name: Restore NuGet packages
-        run: dotnet restore HuaweiHROverlay/HuaweiHROverlay.csproj
-
-      # ── Publish single-file EXE ────────────────────────────────
-      - name: Publish single-file EXE
+      # ── Restore & Publish ─────────────────────────────────────
+      - name: Publish Single-file EXE
+        shell: pwsh
         run: |
+          # Xóa thư mục publish nếu đã tồn tại để tránh rác
+          if (Test-Path "./publish") { Remove-Item -Recurse -Force ./publish }
+
+          # Publish project
           dotnet publish HuaweiHROverlay/HuaweiHROverlay.csproj `
             -c Release `
             -r win-x64 `
             --self-contained false `
             -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
             -o ./publish
 
       # ── Rename with version tag ────────────────────────────────
@@ -45,15 +47,21 @@ jobs:
           $tag = "${{ github.ref_name }}"
           $src = "publish\HuaweiHROverlay.exe"
           $dst = "publish\HuaweiHROverlay-$tag-win-x64.exe"
-          Rename-Item $src $dst
-          Write-Host "Renamed to: $dst"
-          Get-Item $dst | Select-Object Name, @{N='Size (MB)';E={[math]::Round($_.Length/1MB,1)}}
+
+          if (Test-Path $src) {
+              Rename-Item $src $dst
+              Write-Host "Successfully renamed to: $dst"
+          } else {
+              Write-Error "Source file not found: $src"
+              exit 1
+          }
 
       # ── Create GitHub Release ──────────────────────────────────
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "Huawei HR Overlay ${{ github.ref_name }}"
+          tag_name: ${{ github.ref_name }}
           body: |
             ## Huawei HR Overlay ${{ github.ref_name }}
 
@@ -62,18 +70,21 @@ jobs:
             ### ⚠️ Prerequisite
             Install the [.NET 8 Desktop Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0/runtime) before running.
 
-            Quick install via winget:
-            ```
+            **Quick install via winget:**
+            ```powershell
             winget install Microsoft.DotNet.DesktopRuntime.8
             ```
 
-            ### Setup
-            1. Enable **HR Data Broadcasts** on your Huawei watch: `Settings → HR Data Broadcasts → ON`
-            2. Run `HuaweiHROverlay.exe`
-            3. Click **Scan**, select your watch, click **Connect**
-            4. In OBS: Add **Browser Source** → `http://localhost:8764/` → 400×120 px
+            ### 🚀 Quick Start
+            1. Enable **HR Data Broadcasts** on your Huawei watch: `Settings → HR Data Broadcasts → ON`.
+            2. Run `HuaweiHROverlay-${{ github.ref_name }}-win-x64.exe`.
+            3. Click **Scan**, select your watch, and click **Connect**.
+            4. In OBS: Add **Browser Source** → URL: `http://localhost:8764/` → Size: `400×120` px.
 
-            See the [README](https://github.com/${{ github.repository }}/blob/main/README.md) for full setup guide.
+            ---
+            *See the [README](https://github.com/${{ github.repository }}/blob/main/README.md) for full setup guide.*
           files: publish/HuaweiHROverlay-${{ github.ref_name }}-win-x64.exe
           draft: false
           prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
