@@ -1,15 +1,17 @@
 name: Release
 
 on:
-  workflow_dispatch: # Dòng này cho phép bấm nút chạy bằng tay
   push:
-    branches:
-      - main
     tags:
-      - "v*.*.*" # Kích hoạt khi push tag như v1.0.0
+      - "v*.*.*"   # Only triggers on version tags: v1.0.0, v1.2.3, etc.
+                   # Push a tag to trigger: git tag v1.0.0 && git push origin v1.0.0
+
+  # Allow manual run from GitHub Actions UI (for testing)
+  # When run manually, it builds but skips the GitHub Release step (no tag)
+  workflow_dispatch:
 
 permissions:
-  contents: write # Quyền tạo Release và upload Assets
+  contents: write   # Required to create GitHub Releases and upload assets
 
 jobs:
   build-and-release:
@@ -17,24 +19,22 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      # ── Checkout code ──────────────────────────────────────────
+      # ── 1. Checkout ────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── Setup .NET 8 SDK ──────────────────────────────────────
+      # ── 2. Setup .NET 8 SDK ────────────────────────────────────
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
 
-      # ── Restore & Publish ─────────────────────────────────────
+      # ── 3. Publish single-file EXE ─────────────────────────────
       - name: Publish Single-file EXE
         shell: pwsh
         run: |
-          # Xóa thư mục publish nếu đã tồn tại để tránh rác
           if (Test-Path "./publish") { Remove-Item -Recurse -Force ./publish }
 
-          # Publish project
           dotnet publish HuaweiHROverlay/HuaweiHROverlay.csproj `
             -c Release `
             -r win-x64 `
@@ -43,50 +43,64 @@ jobs:
             -p:IncludeNativeLibrariesForSelfExtract=true `
             -o ./publish
 
-      # ── Rename with version tag ────────────────────────────────
+          Write-Host "--- Publish output ---"
+          Get-ChildItem ./publish | Select-Object Name, @{N='MB';E={[math]::Round($_.Length/1MB,2)}}
+
+      # ── 4. Rename EXE with version ─────────────────────────────
       - name: Rename EXE with version
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
-          $src = "publish\HuaweiHROverlay.exe"
-          $dst = "publish\HuaweiHROverlay-$tag-win-x64.exe"
 
-          if (Test-Path $src) {
-              Rename-Item $src $dst
-              Write-Host "Successfully renamed to: $dst"
-          } else {
-              Write-Error "Source file not found: $src"
-              exit 1
+          # Resolve absolute paths — avoids Rename-Item path/device name errors
+          $srcAbs = (Resolve-Path "publish/HuaweiHROverlay.exe").Path
+          $dstAbs = Join-Path (Split-Path $srcAbs) "HuaweiHROverlay-$tag-win-x64.exe"
+
+          Write-Host "Source : $srcAbs"
+          Write-Host "Dest   : $dstAbs"
+
+          if (-not (Test-Path $srcAbs)) {
+            Write-Error "EXE not found after publish: $srcAbs"
+            exit 1
           }
 
-      # ── Create GitHub Release ──────────────────────────────────
+          # Use Move-Item (more reliable than Rename-Item on Windows runners)
+          Move-Item -Path $srcAbs -Destination $dstAbs -Force
+          Write-Host "OK: $(Split-Path $dstAbs -Leaf)  ($([math]::Round((Get-Item $dstAbs).Length/1MB,1)) MB)"
+
+          # Expose the filename to later steps via GITHUB_ENV
+          "RELEASE_FILE=$dstAbs" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "RELEASE_NAME=HuaweiHROverlay-$tag-win-x64.exe" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # ── 5. Create GitHub Release (only on real version tags) ───
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          name: "Huawei HR Overlay ${{ github.ref_name }}"
           tag_name: ${{ github.ref_name }}
+          name: "Huawei HR Overlay ${{ github.ref_name }}"
           body: |
             ## Huawei HR Overlay ${{ github.ref_name }}
 
             Real-time Huawei Watch/Band heart rate overlay for OBS Studio.
 
-            ### ⚠️ Prerequisite
-            Install the [.NET 8 Desktop Runtime (x64)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0/runtime) before running.
+            ### ⚠️ Prerequisite — .NET 8 Desktop Runtime required
 
-            **Quick install via winget:**
+            Install before running the EXE:
             ```powershell
             winget install Microsoft.DotNet.DesktopRuntime.8
             ```
+            Or download from [Microsoft](https://dotnet.microsoft.com/en-us/download/dotnet/8.0/runtime) → *Run desktop apps* → *Windows x64*.
 
             ### 🚀 Quick Start
-            1. Enable **HR Data Broadcasts** on your Huawei watch: `Settings → HR Data Broadcasts → ON`.
-            2. Run `HuaweiHROverlay-${{ github.ref_name }}-win-x64.exe`.
-            3. Click **Scan**, select your watch, and click **Connect**.
-            4. In OBS: Add **Browser Source** → URL: `http://localhost:8764/` → Size: `400×120` px.
+            1. Enable **HR Data Broadcasts** on your Huawei watch: `Settings → HR Data Broadcasts → ON`
+            2. Run `HuaweiHROverlay-${{ github.ref_name }}-win-x64.exe`
+            3. Click **▶ Scan**, select your watch, click **⚡ Connect**
+            4. In OBS: **+ → Browser Source** → URL: `http://localhost:8764/` → 400 × 120 px
 
             ---
-            *See the [README](https://github.com/${{ github.repository }}/blob/main/README.md) for full setup guide.*
-          files: publish/HuaweiHROverlay-${{ github.ref_name }}-win-x64.exe
+            *Full setup guide: [README](https://github.com/${{ github.repository }}/blob/main/README.md)*
+          files: ${{ env.RELEASE_FILE }}
           draft: false
           prerelease: false
         env:
