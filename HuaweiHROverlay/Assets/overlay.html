@@ -198,8 +198,13 @@
 
 <script>
 // ── Configuration ──────────────────────────────────────────────────
-const WS_URL   = 'ws://localhost:8765';
+// Device targeting: /overlay/<ID> path or ?device=<ID> query param.
+// With no device the page shows the most recent update from any device.
+const pathMatch = location.pathname.match(/^\/overlay\/([0-9A-Fa-f]{6,16})\/?$/);
+const DEVICE_ID = (pathMatch ? pathMatch[1] : (new URLSearchParams(location.search).get('device') || ''))
+  .toUpperCase() || null;
 const RECONNECT_DELAY_MS = 3000;
+const WS_URL = 'ws://localhost:8765/' + (DEVICE_ID ? '?device=' + encodeURIComponent(DEVICE_ID) : '');
 
 // ── DOM refs ───────────────────────────────────────────────────────
 const widget    = document.getElementById('widget');
@@ -223,6 +228,7 @@ function connect() {
   ws.addEventListener('message', (evt) => {
     try {
       const data = JSON.parse(evt.data);
+      if (DEVICE_ID && data.id !== DEVICE_ID) return;
       if (typeof data.bpm === 'number' && data.bpm > 0) {
         updateBpm(data.bpm);
       }

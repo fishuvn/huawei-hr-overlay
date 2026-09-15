@@ -3,8 +3,19 @@
 Real-time heart rate overlay for OBS Studio, reading data directly from your **Huawei Watch or Smartband** via Bluetooth LE — no Huawei SDK, no cloud, no phone required.
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)
-![.NET](https://img.shields.io/badge/.NET%208-Runtime%20Required-purple)
+![.NET](https://img.shields.io/badge/.NET%208-Runtime%20Included-purple)
 ![OBS](https://img.shields.io/badge/OBS-Browser%20Source-orange)
+
+---
+
+## Downloads
+
+Grab the latest build from [**Releases**](https://github.com/fishuvn/huawei-hr-overlay/releases):
+
+| File | Size | For |
+|------|------|-----|
+| `HuaweiHROverlay-x.y.z-win-x64.exe` | ~180 MB | **Most users** — .NET 8 Desktop Runtime included, just download and run |
+| `HuaweiHROverlay-x.y.z-win-x64-lite.exe` | ~25 MB | Machines that already have the [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/8.0/runtime) |
 
 ---
 
@@ -31,21 +42,19 @@ No Huawei SDK or cloud account is needed.
 
 ## Requirements
 
-> [!IMPORTANT]
-> **You must install the .NET 8 Desktop Runtime** before running `HuaweiHROverlay.exe`.
-> The app does **not** bundle the runtime — this keeps the EXE small (~2 MB).
+> **No runtime install needed** — the main release EXE bundles the .NET 8 Desktop Runtime (~180 MB single file).
+> A smaller **lite** build (~25 MB) is available for machines that already have the runtime.
 
 | Requirement | Download |
 |-------------|---------|
-| **.NET 8 Desktop Runtime** (x64) | **[Download from Microsoft](https://dotnet.microsoft.com/en-us/download/dotnet/8.0/runtime)** → _Run desktop apps_ → _Windows x64_ |
 | Windows 10 (build 19041+) or Windows 11 | — |
+| **Bluetooth 5.0 or newer adapter** | Most modern PCs have it built in; older PCs need a BT 5.0+ USB dongle |
 | OBS Studio | [obsproject.com](https://obsproject.com) |
 | Huawei Watch/Band with HR Data Broadcast | Most GT2/GT3/GT4, Band 6+, Watch Fit series |
 
-### Quick .NET 8 Runtime Install (PowerShell)
-```powershell
-winget install Microsoft.DotNet.DesktopRuntime.8
-```
+> [!NOTE]
+> Bluetooth 4.x adapters may discover devices but often fail to hold a reliable BLE connection to
+> modern watches. If scans come up empty or connections drop, a BT 5.0+ USB dongle is the usual fix.
 
 ---
 
@@ -81,12 +90,13 @@ Double-click **`HuaweiHROverlay.exe`** — no installation needed.
 
 ---
 
-## Step 4 — Connect to your watch
+## Step 4 — Connect to your watch(es)
 
 1. Click **▶ Scan** — your watch should appear within 5–10 seconds
 2. Select it from the list
 3. Click **⚡ Connect**
-4. Live BPM will update in the control panel
+4. Live BPM shows in the **Connected — Live** list
+5. Keep scanning and connect **more watches/bands** the same way — each gets its own live row and overlay URL
 
 ---
 
@@ -99,6 +109,16 @@ Double-click **`HuaweiHROverlay.exe`** — no installation needed.
 5. Click **OK**
 
 The animated heart rate widget appears on your stream!
+
+### Multiple devices in OBS
+
+Add one Browser Source per device, each with its own URL:
+
+```
+http://localhost:8764/overlay/<DEVICE-ID>
+```
+
+`<DEVICE-ID>` is the 12-character hex Bluetooth address shown under the device name in the app's scan list (e.g. `http://localhost:8764/overlay/A4C138F12345`). A source without an ID shows the most recent BPM from any connected device.
 
 ---
 
@@ -137,9 +157,28 @@ Any device implementing the standard **BLE GATT Heart Rate Service (0x180D)** wi
 
 | Service | Address |
 |---------|---------|
-| Overlay page (OBS Browser Source) | `http://localhost:8764/` |
-| WebSocket BPM stream | `ws://localhost:8765/` |
+| Overlay page, any device (OBS Browser Source) | `http://localhost:8764/` |
+| Overlay page, one device | `http://localhost:8764/overlay/<DEVICE-ID>` |
+| WebSocket BPM stream, one device | `ws://localhost:8765/?device=<DEVICE-ID>` |
 | Status JSON | `http://localhost:8764/status` |
+| Status JSON, one device | `http://localhost:8764/status?device=<DEVICE-ID>` |
+
+---
+
+## Changelog
+
+**v1.1.0**
+- **Multi-device support** — connect multiple watches/bands at the same time, each with its own live row and overlay
+- **Per-device overlay URLs** — `http://localhost:8764/overlay/<DEVICE-ID>` for one browser source per watch
+- **Self-contained release build** — main EXE now bundles the .NET 8 Desktop Runtime (no install needed)
+- **Lite build** — small EXE for machines that already have the runtime
+- Fixed: app shutdown could hang when OBS sources were still connected
+- Fixed: malformed BLE heart rate packets could crash the app
+- Fixed: Scan button stuck disabled after unexpected Bluetooth stop
+- Fixed: port conflict on startup no longer kills the app
+
+**v1.0.0**
+- Initial release: single-watch BLE heart rate overlay for OBS
 
 ---
 
@@ -152,9 +191,12 @@ Requires **.NET 8 SDK** ([download](https://dotnet.microsoft.com/en-us/download/
 cd HuaweiHROverlay
 dotnet run
 
-# Release single-file EXE (requires .NET 8 Runtime on target machine)
-dotnet publish -c Release -o ./publish
-# Output: ./publish/HuaweiHROverlay.exe
+# Release single-file EXE with bundled .NET runtime (no install needed on target)
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ./publish
+# Output: ./publish/HuaweiHROverlay.exe (~150 MB)
+
+# Small EXE (~2 MB) for machines that already have the .NET 8 Desktop Runtime
+dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o ./publish
 ```
 
 ---
@@ -185,9 +227,9 @@ dotnet publish -c Release -o ./publish
 ```
 HuaweiHROverlay/
 ├── Core/
-│   ├── BleHeartRateService.cs   # BLE advertisement scanner + GATT reader
-│   ├── WebSocketServer.cs       # WS broadcast server (port 8765)
-│   ├── HttpOverlayServer.cs     # HTTP server for overlay (port 8764)
+│   ├── BleHeartRateService.cs   # BLE scanner + multi-device session manager (one session per watch)
+│   ├── WebSocketServer.cs       # WS broadcast server, per-device subscriptions (port 8765)
+│   ├── HttpOverlayServer.cs     # HTTP server for overlay + status JSON (port 8764)
 │   └── HeartRateReading.cs      # Data model
 ├── Assets/
 │   ├── overlay.html             # Animated OBS overlay (embedded in EXE)

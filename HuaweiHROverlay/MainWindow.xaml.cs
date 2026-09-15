@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media;
@@ -6,6 +7,28 @@ using System.Windows.Threading;
 using HuaweiHROverlay.Core;
 
 namespace HuaweiHROverlay;
+
+/// <summary>Live row for one connected device.</summary>
+public class ConnectedDeviceVm : INotifyPropertyChanged
+{
+    private int _bpm;
+    public string Id { get; init; } = "";
+    public string Name { get; init; } = "";
+
+    public int Bpm
+    {
+        get => _bpm;
+        set
+        {
+            _bpm = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(BpmDisplay)));
+        }
+    }
+
+    public string BpmDisplay => _bpm > 0 ? _bpm.ToString() : "--";
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+}
 
 public partial class MainWindow : Window
 {
@@ -16,10 +39,11 @@ public partial class MainWindow : Window
 
     // ── State ─────────────────────────────────────────────────────────────
     private readonly ObservableCollection<BleDeviceInfo> _devices = [];
-    private bool _isConnected;
-    private int _currentBpm;
+    private readonly ObservableCollection<ConnectedDeviceVm> _connected = [];
+    private ConnectedDeviceVm? _heroDevice;   // which connected device the big BPM shows
 
     // ── Simulator ─────────────────────────────────────────────────────────
+    private const string SimDeviceId = "SIM";
     private DispatcherTimer? _simTimer;
     private readonly Random _rng = new();
     private int _simBpm = 72;
@@ -31,6 +55,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DeviceList.ItemsSource = _devices;
+        ConnectedList.ItemsSource = _connected;
         Loaded += OnLoaded;
         Closing += OnClosing;
     }
@@ -39,25 +64,45 @@ public partial class MainWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // Start WebSocket server
-        _wsServer = new WebSocketServer();
-        _wsServer.ClientCountChanged += (_, count) =>
-            Dispatcher.Invoke(() => WsClientCount.Text = count.ToString());
-        _wsServer.Start();
+        // Start servers — a busy port must not take BLE down with it
+        var startupErrors = new List<string>();
 
-        // Start HTTP overlay server
-        _httpServer = new HttpOverlayServer();
-        _httpServer.Start();
+        try
+        {
+            _wsServer = new WebSocketServer();
+            _wsServer.ClientCountChanged += (_, count) =>
+                Dispatcher.Invoke(() => WsClientCount.Text = count.ToString());
+            _wsServer.Start();
+        }
+        catch (Exception ex)
+        {
+            _wsServer = null;
+            startupErrors.Add($"WebSocket (port {WebSocketServer.Port}): {ex.Message}");
+        }
 
-        SetStatus($"Servers ready. WS: ws://localhost:{WebSocketServer.Port}/   HTTP: http://localhost:{HttpOverlayServer.Port}/");
+        try
+        {
+            _httpServer = new HttpOverlayServer();
+            _httpServer.Start();
+        }
+        catch (Exception ex)
+        {
+            _httpServer = null;
+            startupErrors.Add($"HTTP (port {HttpOverlayServer.Port}): {ex.Message}");
+        }
+
+        SetStatus(startupErrors.Count == 0
+            ? $"Servers ready. WS: ws://localhost:{WebSocketServer.Port}/   HTTP: http://localhost:{HttpOverlayServer.Port}/"
+            : "Server startup failed — " + string.Join("; ", startupErrors));
 
         // Init BLE service
         _ble = new BleHeartRateService();
         _ble.HeartRateChanged += OnHeartRateChanged;
         _ble.DeviceDiscovered += OnDeviceDiscovered;
-        _ble.DeviceRemoved += OnDeviceRemoved;
         _ble.StatusChanged += (_, msg) => Dispatcher.Invoke(() => SetStatus(msg));
-        _ble.Disconnected += (_, _) => Dispatcher.Invoke(OnBleDisconnected);
+        _ble.SessionAdded   += (_, s) => Dispatcher.Invoke(() => OnSessionAdded(s));
+        _ble.SessionRemoved += (_, s) => Dispatcher.Invoke(() => OnSessionRemoved(s));
+        _ble.ScanningStoppedUnexpectedly += (_, _) => Dispatcher.Invoke(OnScanStoppedUnexpectedly);
 
         await Task.CompletedTask;
     }
@@ -66,23 +111,26 @@ public partial class MainWindow : Window
 
     private void OnHeartRateChanged(object? sender, HeartRateReading reading)
     {
-        _currentBpm = reading.Bpm;
-        Dispatcher.Invoke(() => UpdateBpmDisplay(reading.Bpm));
+        var vm = _connected.FirstOrDefault(c => c.Id == reading.DeviceId);
+        if (vm != null) vm.Bpm = reading.Bpm;
+        if (vm != null && vm == _heroDevice) UpdateBpmDisplay(reading.Bpm);
 
-        _httpServer?.UpdateBpm(reading.Bpm, true);
-        _ = _wsServer?.BroadcastAsync(reading.ToJson());
+        _httpServer?.UpdateBpm(reading.DeviceId, reading.Bpm, true);
+        _ = _wsServer?.BroadcastAsync(reading.DeviceId, reading.ToJson());
     }
 
     private void OnDeviceDiscovered(object? sender, BleDeviceInfo info)
     {
         Dispatcher.Invoke(() =>
         {
-            // Update existing or add new
+            // Update existing or add new; keep the selected row stable across refreshes
+            var selectedId = (DeviceList.SelectedItem as BleDeviceInfo)?.Id;
             var existing = _devices.FirstOrDefault(d => d.Id == info.Id);
             if (existing != null)
             {
                 var idx = _devices.IndexOf(existing);
                 _devices[idx] = info;
+                if (selectedId == info.Id) DeviceList.SelectedIndex = idx;
             }
             else
             {
@@ -92,22 +140,41 @@ public partial class MainWindow : Window
         });
     }
 
-    private void OnDeviceRemoved(object? sender, BleDeviceInfo info)
+    private void OnSessionAdded(BleDeviceSession session)
     {
-        Dispatcher.Invoke(() =>
+        var vm = new ConnectedDeviceVm { Id = session.DeviceId, Name = session.DeviceName };
+        _connected.Add(vm);
+
+        if (_heroDevice == null)
         {
-            var existing = _devices.FirstOrDefault(d => d.Id == info.Id);
-            if (existing != null) _devices.Remove(existing);
-        });
+            _heroDevice = vm;
+            UpdateConnectionBadge(true);
+            UpdateBpmDisplay(vm.Bpm);
+        }
+        ConnectedCard.Visibility = Visibility.Visible;
+        UpdateConnectButtonState();
     }
 
-    private void OnBleDisconnected()
+    private void OnSessionRemoved(BleDeviceSession session)
     {
-        _isConnected = false;
-        UpdateConnectionBadge(false);
-        ConnectButton.IsEnabled = DeviceList.SelectedItem != null;
-        DisconnectButton.IsEnabled = false;
-        UpdateBpmDisplay(0);
+        var vm = _connected.FirstOrDefault(c => c.Id == session.DeviceId);
+        if (vm != null) _connected.Remove(vm);
+
+        if (_heroDevice == vm)
+        {
+            _heroDevice = _connected.FirstOrDefault();
+            UpdateConnectionBadge(_heroDevice != null);
+            UpdateBpmDisplay(_heroDevice?.Bpm ?? 0);
+        }
+        if (_connected.Count == 0) ConnectedCard.Visibility = Visibility.Collapsed;
+        UpdateConnectButtonState();
+    }
+
+    private void OnScanStoppedUnexpectedly()
+    {
+        ScanButton.IsEnabled = true;
+        StopScanButton.IsEnabled = false;
+        ScanStatus.Text = "Scan stopped unexpectedly. Click Scan to retry.";
     }
 
     // ── Button Handlers ───────────────────────────────────────────────────
@@ -131,35 +198,40 @@ public partial class MainWindow : Window
 
     private void DeviceList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        ConnectButton.IsEnabled = DeviceList.SelectedItem != null && !_isConnected;
+        UpdateConnectButtonState();
+    }
+
+    private void UpdateConnectButtonState()
+    {
+        if (DeviceList.SelectedItem is not BleDeviceInfo selected)
+        {
+            ConnectButton.IsEnabled = false;
+            return;
+        }
+        ConnectButton.IsEnabled = !(_ble?.IsConnectedTo(selected.Id) ?? false);
     }
 
     private async void ConnectButton_Click(object sender, RoutedEventArgs e)
     {
         if (DeviceList.SelectedItem is not BleDeviceInfo device) return;
+        if (_ble == null || _ble.IsConnectedTo(device.Id)) return;
 
         ConnectButton.IsEnabled = false;
-        DisconnectButton.IsEnabled = false;
         SetStatus($"Connecting to {device.DisplayName}…");
 
-        bool ok = await _ble!.ConnectAsync(device.Id, device.DisplayName);
+        // Scanning stays on so more devices can be connected right after
+        bool ok = await _ble.ConnectAsync(device.Id, device.DisplayName);
 
-        if (ok)
-        {
-            _isConnected = true;
-            UpdateConnectionBadge(true);
-            DisconnectButton.IsEnabled = true;
-        }
-        else
-        {
-            ConnectButton.IsEnabled = true;
-        }
+        SetStatus(ok
+            ? $"{device.DisplayName} connected. {_connected.Count} device(s) live."
+            : $"Could not connect to {device.DisplayName}.");
+        UpdateConnectButtonState();
     }
 
-    private async void DisconnectButton_Click(object sender, RoutedEventArgs e)
+    private async void DisconnectConnected_Click(object sender, RoutedEventArgs e)
     {
-        if (_ble != null) await _ble.DisconnectAsync();
-        OnBleDisconnected();
+        if ((sender as FrameworkElement)?.DataContext is not ConnectedDeviceVm vm || _ble == null) return;
+        await _ble.DisconnectAsync(vm.Id);
     }
 
     private void CopyUrl_Click(object sender, RoutedEventArgs e)
@@ -177,26 +249,43 @@ public partial class MainWindow : Window
 
     private void SimMode_Checked(object sender, RoutedEventArgs e)
     {
-        // Disconnect real BLE if active
-        if (_isConnected) DisconnectButton_Click(sender, e);
-
         _simTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000) };
         _simTimer.Tick += SimTick;
         _simTimer.Start();
 
-        UpdateConnectionBadge(true, simulated: true);
-        SetStatus("Simulator active — generating fake BPM values.");
+        var vm = _connected.FirstOrDefault(c => c.Id == SimDeviceId);
+        if (vm == null)
+        {
+            vm = new ConnectedDeviceVm { Id = SimDeviceId, Name = "Simulator" };
+            _connected.Add(vm);
+        }
+        if (_heroDevice == null)
+        {
+            _heroDevice = vm;
+            UpdateConnectionBadge(true, simulated: true);
+            UpdateBpmDisplay(vm.Bpm);
+        }
+        ConnectedCard.Visibility = Visibility.Visible;
+        SetStatus("Simulator active — generating fake BPM values (device id SIM).");
     }
 
     private void SimMode_Unchecked(object sender, RoutedEventArgs e)
     {
         _simTimer?.Stop();
         _simTimer = null;
-        UpdateConnectionBadge(false);
-        UpdateBpmDisplay(0);
+        _httpServer?.UpdateBpm(SimDeviceId, 0, false);
+        _ = _wsServer?.BroadcastAsync(SimDeviceId, "{\"bpm\":0,\"id\":\"SIM\",\"simulated\":false}");
+
+        var vm = _connected.FirstOrDefault(c => c.Id == SimDeviceId);
+        if (vm != null) _connected.Remove(vm);
+        if (_heroDevice?.Id == SimDeviceId)
+        {
+            _heroDevice = _connected.FirstOrDefault();
+            UpdateConnectionBadge(_heroDevice != null);
+            UpdateBpmDisplay(_heroDevice?.Bpm ?? 0);
+        }
+        if (_connected.Count == 0) ConnectedCard.Visibility = Visibility.Collapsed;
         SetStatus("Simulator stopped.");
-        _httpServer?.UpdateBpm(0, false);
-        _ = _wsServer?.BroadcastAsync("{\"bpm\":0,\"simulated\":false}");
     }
 
     private void SimTick(object? sender, EventArgs e)
@@ -207,15 +296,13 @@ public partial class MainWindow : Window
         if (_simBpm <= 55  || _rng.Next(0, 10) == 0) _simDir = 1;
         _simBpm = Math.Clamp(_simBpm, 50, 180);
 
-        var reading = new HeartRateReading
-        {
-            Bpm = _simBpm,
-            DeviceName = "Simulator"
-        };
+        var vm = _connected.FirstOrDefault(c => c.Id == SimDeviceId);
+        if (vm != null) vm.Bpm = _simBpm;
+        if (_heroDevice?.Id == SimDeviceId) UpdateBpmDisplay(_simBpm);
 
-        UpdateBpmDisplay(_simBpm);
-        _httpServer?.UpdateBpm(_simBpm, true);
-        _ = _wsServer?.BroadcastAsync(reading.ToJson());
+        _httpServer?.UpdateBpm(SimDeviceId, _simBpm, true);
+        _ = _wsServer?.BroadcastAsync(SimDeviceId,
+            new HeartRateReading { Bpm = _simBpm, DeviceId = SimDeviceId, DeviceName = "Simulator" }.ToJson());
     }
 
     // ── UI Helpers ────────────────────────────────────────────────────────

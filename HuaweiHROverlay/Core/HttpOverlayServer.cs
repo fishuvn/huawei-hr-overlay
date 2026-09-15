@@ -1,6 +1,7 @@
 using System.Net;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace HuaweiHROverlay.Core;
 
@@ -9,17 +10,19 @@ namespace HuaweiHROverlay.Core;
 /// The overlay.html is embedded as a resource in the assembly.
 ///
 /// Endpoints:
-///   GET /          → overlay.html (OBS Browser Source URL)
-///   GET /status    → {"bpm": N, "connected": true/false}  (health check)
+///   GET /                → overlay.html showing the most recent device
+///   GET /overlay/&lt;ID&gt;   → overlay.html locked to one device (12-hex Bluetooth address)
+///   GET /status          → {"bpm":N,"connected":bool,"device":"ID"} latest overall
+///   GET /status?device=ID→ same, per device
 /// </summary>
 public class HttpOverlayServer : IAsyncDisposable
 {
     private readonly HttpListener _listener = new();
+    private readonly object _stateLock = new();
+    private readonly Dictionary<string, (int bpm, bool connected)> _devices = [];
     private CancellationTokenSource? _cts;
     private Task? _serveLoop;
     private string _cachedHtml = string.Empty;
-    private int _currentBpm;
-    private bool _isConnected;
 
     public const int Port = 8764;
     public string OverlayUrl => $"http://localhost:{Port}/";
@@ -33,10 +36,12 @@ public class HttpOverlayServer : IAsyncDisposable
         _serveLoop = ServeLoopAsync(_cts.Token);
     }
 
-    public void UpdateBpm(int bpm, bool connected)
+    public void UpdateBpm(string deviceId, int bpm, bool connected)
     {
-        _currentBpm = bpm;
-        _isConnected = connected;
+        lock (_stateLock)
+        {
+            _devices[deviceId.ToUpperInvariant()] = (bpm, connected);
+        }
     }
 
     // ──────────────────────────────────────────────
@@ -64,12 +69,11 @@ public class HttpOverlayServer : IAsyncDisposable
 
             if (path == "/status")
             {
-                var json = $"{{\"bpm\":{_currentBpm},\"connected\":{_isConnected.ToString().ToLower()}}}";
-                WriteResponse(ctx, 200, "application/json", json);
+                WriteResponse(ctx, 200, "application/json", StatusJson(GetQueryValue(ctx, "device")));
             }
             else
             {
-                // Serve overlay for any other path
+                // Serve overlay for any other path — /overlay/<ID> is picked up by the page itself
                 WriteResponse(ctx, 200, "text/html; charset=utf-8", _cachedHtml);
             }
         }
@@ -78,6 +82,35 @@ public class HttpOverlayServer : IAsyncDisposable
         {
             try { ctx.Response.Close(); } catch { }
         }
+    }
+
+    private string StatusJson(string? deviceId)
+    {
+        lock (_stateLock)
+        {
+            if (deviceId != null)
+            {
+                var found = _devices.TryGetValue(deviceId, out var d);
+                return $"{{\"bpm\":{(found ? d.bpm : 0)},\"connected\":{(found && d.connected).ToString().ToLower()},\"device\":\"{deviceId}\"}}";
+            }
+
+            bool connected = _devices.Count > 0;
+            int bpm = 0;
+            string device = "";
+            foreach (var (id, state) in _devices)
+            {
+                if (state.bpm > 0) { bpm = state.bpm; device = id; }
+            }
+            return $"{{\"bpm\":{bpm},\"connected\":{connected.ToString().ToLower()},\"device\":\"{device}\"}}";
+        }
+    }
+
+    private static string? GetQueryValue(HttpListenerContext ctx, string key)
+    {
+        var query = ctx.Request.Url?.Query;
+        if (string.IsNullOrEmpty(query)) return null;
+        var m = Regex.Match(query, $@"(?:^|[?&]){key}=([^&]+)", RegexOptions.IgnoreCase);
+        return m.Success ? Uri.UnescapeDataString(m.Groups[1].Value).ToUpperInvariant() : null;
     }
 
     private static void WriteResponse(HttpListenerContext ctx, int statusCode, string contentType, string body)
@@ -107,10 +140,11 @@ public class HttpOverlayServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _cts?.Cancel();
+        // Stop first: a pending GetContextAsync only unblocks when the listener stops.
+        try { _listener.Stop(); } catch { /* never started or already stopped */ }
         if (_serveLoop != null)
         {
             try { await _serveLoop; } catch { }
         }
-        _listener.Stop();
     }
 }

@@ -1,18 +1,19 @@
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace HuaweiHROverlay.Core;
 
 /// <summary>
 /// Lightweight WebSocket broadcast server.
-/// All connected clients (OBS browser sources) receive every BPM update as JSON.
-/// Runs on ws://localhost:8765/
+/// Clients connect to ws://localhost:8765/?device=&lt;DEVICE_ID&gt; to receive only that
+/// device's BPM updates; clients without a device parameter receive every update.
 /// </summary>
 public class WebSocketServer : IAsyncDisposable
 {
     private readonly HttpListener _listener = new();
-    private readonly List<WebSocket> _clients = [];
+    private readonly List<(WebSocket ws, string? deviceId)> _clients = [];
     private readonly SemaphoreSlim _lock = new(1, 1);
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
@@ -32,9 +33,10 @@ public class WebSocketServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// Broadcast a JSON message to all connected WebSocket clients.
+    /// Broadcast a JSON message to all clients subscribed to deviceId
+    /// (null-subscribed clients receive everything).
     /// </summary>
-    public async Task BroadcastAsync(string json)
+    public async Task BroadcastAsync(string deviceId, string json)
     {
         var bytes = Encoding.UTF8.GetBytes(json);
         var segment = new ArraySegment<byte>(bytes);
@@ -43,19 +45,14 @@ public class WebSocketServer : IAsyncDisposable
         try
         {
             var dead = new List<WebSocket>();
-            foreach (var ws in _clients)
+            foreach (var (ws, sub) in _clients)
             {
-                if (ws.State == WebSocketState.Open)
-                {
-                    try { await ws.SendAsync(segment, WebSocketMessageType.Text, true, CancellationToken.None); }
-                    catch { dead.Add(ws); }
-                }
-                else
-                {
-                    dead.Add(ws);
-                }
+                if (ws.State != WebSocketState.Open) { dead.Add(ws); continue; }
+                if (sub != null && !string.Equals(sub, deviceId, StringComparison.OrdinalIgnoreCase)) continue;
+                try { await ws.SendAsync(segment, WebSocketMessageType.Text, true, CancellationToken.None); }
+                catch { dead.Add(ws); }
             }
-            foreach (var d in dead) _clients.Remove(d);
+            foreach (var d in dead) _clients.RemoveAll(c => c.ws == d);
             ClientCount = _clients.Count;
         }
         finally
@@ -97,16 +94,25 @@ public class WebSocketServer : IAsyncDisposable
 
         var ws = wsCtx.WebSocket;
 
-        await _lock.WaitAsync(ct);
-        _clients.Add(ws);
-        ClientCount = _clients.Count;
-        _lock.Release();
-        ClientCountChanged?.Invoke(this, ClientCount);
+        // ?device=<ID> subscribes the client to a single device
+        string? deviceId = null;
+        var query = ctx.Request.Url?.Query;
+        if (!string.IsNullOrEmpty(query))
+        {
+            var m = Regex.Match(query, @"(?:^|[?&])device=([^&]+)", RegexOptions.IgnoreCase);
+            if (m.Success) deviceId = System.Uri.UnescapeDataString(m.Groups[1].Value).ToUpperInvariant();
+        }
 
-        // Keep alive — read and discard any incoming frames
-        var buf = new byte[256];
         try
         {
+            await _lock.WaitAsync(ct);
+            _clients.Add((ws, deviceId));
+            ClientCount = _clients.Count;
+            _lock.Release();
+            ClientCountChanged?.Invoke(this, ClientCount);
+
+            // Keep alive — read and discard any incoming frames
+            var buf = new byte[256];
             while (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
             {
                 var result = await ws.ReceiveAsync(new ArraySegment<byte>(buf), ct);
@@ -117,14 +123,18 @@ public class WebSocketServer : IAsyncDisposable
                 }
             }
         }
-        catch { /* client disconnected */ }
+        catch { /* client disconnected or app shutting down */ }
         finally
         {
-            await _lock.WaitAsync(CancellationToken.None);
-            _clients.Remove(ws);
-            ClientCount = _clients.Count;
-            _lock.Release();
-            ClientCountChanged?.Invoke(this, ClientCount);
+            try
+            {
+                await _lock.WaitAsync(CancellationToken.None);
+                _clients.RemoveAll(c => c.ws == ws);
+                ClientCount = _clients.Count;
+                _lock.Release();
+                ClientCountChanged?.Invoke(this, ClientCount);
+            }
+            catch { /* lock unavailable during shutdown */ }
             ws.Dispose();
         }
     }
@@ -132,13 +142,14 @@ public class WebSocketServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _cts?.Cancel();
+        // Stop first: a pending GetContextAsync only unblocks when the listener stops.
+        try { _listener.Stop(); } catch { /* never started or already stopped */ }
         if (_acceptLoop != null)
         {
             try { await _acceptLoop; } catch { }
         }
-        _listener.Stop();
         await _lock.WaitAsync();
-        foreach (var ws in _clients)
+        foreach (var (ws, _) in _clients)
         {
             try { ws.Dispose(); } catch { }
         }

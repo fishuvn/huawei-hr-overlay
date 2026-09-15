@@ -16,10 +16,12 @@
             <!-- Header / BPM hero -->
             <RowDefinition Height="Auto"/>
             <!-- Device scanner -->
+            <RowDefinition Height="Auto"/>
+            <!-- Connected devices (live) -->
             <RowDefinition Height="*"/>
             <!-- Device list -->
             <RowDefinition Height="Auto"/>
-            <!-- Action buttons -->
+            <!-- Connect button -->
             <RowDefinition Height="Auto"/>
             <!-- OBS section -->
             <RowDefinition Height="Auto"/>
@@ -90,8 +92,40 @@
             </Grid>
         </Border>
 
+        <!-- ══════ CONNECTED DEVICES (LIVE) ══════ -->
+        <Border x:Name="ConnectedCard" Grid.Row="2" Style="{StaticResource Card}" Margin="0,0,0,6" Visibility="Collapsed">
+            <StackPanel>
+                <TextBlock Text="CONNECTED — LIVE" Style="{StaticResource SectionLabel}"/>
+                <ItemsControl x:Name="ConnectedList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13"
+                                           Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                                    <TextBlock Text="{Binding BpmDisplay}" FontSize="15" FontWeight="Bold"
+                                               Foreground="{StaticResource AccentRedBrush}"/>
+                                    <TextBlock Text="BPM" FontSize="9" Foreground="{StaticResource TextSecondaryBrush}"
+                                               VerticalAlignment="Bottom" Margin="4,0,0,2"/>
+                                </StackPanel>
+                                <Button Grid.Column="2" Content="✕" Style="{StaticResource GhostButton}" Padding="9,2"
+                                        Margin="10,0,0,0" FontSize="11" Click="DisconnectConnected_Click"
+                                        ToolTip="Disconnect this device"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
         <!-- ══════ DEVICE LIST ══════ -->
-        <Border Grid.Row="2" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="10" Margin="0,0,0,14" ClipToBounds="True">
+        <Border Grid.Row="3" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="10" Margin="0,0,0,14" ClipToBounds="True">
             <ListBox x:Name="DeviceList"
                      Style="{StaticResource DeviceListBox}"
                      ItemContainerStyle="{StaticResource DeviceListItem}"
@@ -118,16 +152,18 @@
             </ListBox>
         </Border>
 
-        <!-- ══════ CONNECT / DISCONNECT BUTTONS ══════ -->
-        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,14">
+        <!-- ══════ CONNECT BUTTON ══════ -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,0,0,14">
             <Button x:Name="ConnectButton" Content="⚡  Connect" Style="{StaticResource PrimaryButton}"
-                    IsEnabled="False" Click="ConnectButton_Click"/>
-            <Button x:Name="DisconnectButton" Content="✕  Disconnect" Style="{StaticResource GhostButton}"
-                    Margin="10,0,0,0" IsEnabled="False" Click="DisconnectButton_Click"/>
+                    IsEnabled="False" Click="ConnectButton_Click"
+                    ToolTip="Connect the selected device — scanning stays on so you can add more"/>
+            <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" Style="{StaticResource StatusText}"
+                       TextWrapping="Wrap" MaxWidth="300"
+                       Text="Connect every watch/band you need — each gets its own overlay URL. Disconnect with ✕ in the list above."/>
         </StackPanel>
 
         <!-- ══════ OBS SECTION ══════ -->
-        <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,0,0,14">
+        <Border Grid.Row="5" Style="{StaticResource Card}" Margin="0,0,0,14">
             <StackPanel>
                 <TextBlock Text="OBS BROWSER SOURCE" Style="{StaticResource SectionLabel}"/>
                 <TextBlock Text="Add a Browser Source in OBS and paste this URL:" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="0,0,0,8"/>
@@ -146,14 +182,14 @@
                     <Button Content="🌐  Open in Browser" Style="{StaticResource SecondaryButton}"
                             Padding="12,7" Click="OpenBrowser_Click"/>
                     <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11">
-                        Recommended size: 400 × 120 px
+                        Per-device URL: add /overlay/&lt;DEVICE-ID&gt; · Recommended size: 400 × 120 px
                     </TextBlock>
                 </StackPanel>
             </StackPanel>
         </Border>
 
         <!-- ══════ STATUS BAR ══════ -->
-        <Border Grid.Row="5" Background="#0D0D15" CornerRadius="8" Padding="12,8">
+        <Border Grid.Row="6" Background="#0D0D15" CornerRadius="8" Padding="12,8">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
