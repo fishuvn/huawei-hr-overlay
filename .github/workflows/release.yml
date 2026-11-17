@@ -3,11 +3,9 @@ name: Release
 on:
   push:
     tags:
-      - "v*.*.*"   # Only triggers on version tags: v1.0.0, v1.2.3, etc.
-                   # Push a tag to trigger: git tag v1.0.0 && git push origin v1.0.0
+      - "v*.*.*"   # Triggers on version tags: v1.2.0, v1.2.1, etc.
 
   # Allow manual run from GitHub Actions UI (for testing)
-  # When run manually, it builds but skips the GitHub Release step (no tag)
   workflow_dispatch:
 
 permissions:
@@ -35,12 +33,20 @@ jobs:
         run: |
           if (Test-Path "./publish") { Remove-Item -Recurse -Force ./publish }
 
+          $tag = "${{ github.ref_name }}"
+          $verArg = @()
+          if ($tag -match '^v(\d+\.\d+\.\d+)') {
+            $verArg = @("-p:Version=$($Matches[1])")
+          }
+
           dotnet publish HuaweiHROverlay/HuaweiHROverlay.csproj `
             -c Release `
             -r win-x64 `
             --self-contained true `
             -p:PublishSingleFile=true `
             -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:BuildVariant=full `
+            @verArg `
             -o ./publish
 
           Write-Host "--- Publish output ---"
@@ -52,12 +58,20 @@ jobs:
         run: |
           if (Test-Path "./publish-lite") { Remove-Item -Recurse -Force ./publish-lite }
 
+          $tag = "${{ github.ref_name }}"
+          $verArg = @()
+          if ($tag -match '^v(\d+\.\d+\.\d+)') {
+            $verArg = @("-p:Version=$($Matches[1])")
+          }
+
           dotnet publish HuaweiHROverlay/HuaweiHROverlay.csproj `
             -c Release `
             -r win-x64 `
             --self-contained false `
             -p:PublishSingleFile=true `
             -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:BuildVariant=lite `
+            @verArg `
             -o ./publish-lite
 
           Write-Host "--- Publish-lite output ---"
@@ -70,7 +84,6 @@ jobs:
           $tag = "${{ github.ref_name }}"
           if ($tag -eq "") { $tag = "dev" }
 
-          # Resolve absolute paths — avoids Rename-Item path/device name errors
           $fullSrc = (Resolve-Path "publish/HuaweiHROverlay.exe").Path
           $liteSrc = (Resolve-Path "publish-lite/HuaweiHROverlay.exe").Path
           $fullDst = Join-Path (Split-Path $fullSrc) "HuaweiHROverlay-$tag-win-x64.exe"
@@ -79,13 +92,11 @@ jobs:
           if (-not (Test-Path $fullSrc)) { Write-Error "EXE not found: $fullSrc"; exit 1 }
           if (-not (Test-Path $liteSrc)) { Write-Error "EXE not found: $liteSrc"; exit 1 }
 
-          # Use Move-Item (more reliable than Rename-Item on Windows runners)
           Move-Item -Path $fullSrc -Destination $fullDst -Force
           Move-Item -Path $liteSrc -Destination $liteDst -Force
           Write-Host "OK: $(Split-Path $fullDst -Leaf)  ($([math]::Round((Get-Item $fullDst).Length/1MB,1)) MB)"
           Write-Host "OK: $(Split-Path $liteDst -Leaf)  ($([math]::Round((Get-Item $liteDst).Length/1MB,1)) MB)"
 
-          # Expose the filenames to later steps via GITHUB_ENV
           "RELEASE_FILE=$fullDst" | Out-File -FilePath $env:GITHUB_ENV -Append
           "RELEASE_NAME=HuaweiHROverlay-$tag-win-x64.exe" | Out-File -FilePath $env:GITHUB_ENV -Append
           "LITE_FILE=$liteDst" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -101,8 +112,6 @@ jobs:
           body: |
             ## What's New in ${{ github.ref_name }}
 
-            *(full changelog below)*
-
             ### ✅ Two downloads — pick one
 
             | File | Size | For |
@@ -113,22 +122,23 @@ jobs:
             ### 🚀 Quick Start
             1. Enable **HR Data Broadcasts** on your Huawei watch: `Settings → HR Data Broadcasts → ON`
             2. Run the EXE
-            3. Click **▶ Scan**, select your watch, click **⚡ Connect** — repeat for more watches
-            4. In OBS: **+ → Browser Source** → URL: `http://localhost:8764/` (or `http://localhost:8764/overlay/<DEVICE-ID>` per watch) → 400 × 120 px
+            3. Click **▶ Scan**, double-click your watch (or click **⚡ Connect Watch**) — repeat for more watches
+            4. Customize your theme in **OBS Browser Source Studio**, click **Copy URL**, and paste into an OBS **Browser Source** (400 × 120 px)
 
             **Requires a Bluetooth 5.0+ adapter** (built into most modern PCs/dongles).
 
             ### 📋 Changelog
 
+            **v1.2.0**
+            - **In-app GitHub Updater** — automatic & manual update checks via GitHub Releases, matching Full/Lite build detection, SHA-256 verification, and 1-click download & restart
+            - **Redesigned Telemetry Studio UI** — resizable dark interface, live BPM trend sparkline, session Min/Avg/Peak stats, HR-only scanner filter, signal quality bars, and per-device 1-click URL copy
+            - **OBS Overlay Studio & Themes** — crisp vector heart + real-time P-QRS-T ECG waveform canvas, 4 built-in themes (`glass`, `minimal`, `neon`, `pill`), optional Min/Max, watch name, and auto-hide when offline
+            - **BLE Auto-Reconnect** — automatically recovers connection if your watch briefly steps out of Bluetooth range
+
             **v1.1.0**
             - **Multi-device support** — connect multiple watches/bands at the same time, each with its own overlay
-            - **Per-device overlay URLs** — `http://localhost:8764/overlay/<DEVICE-ID>` for one browser source per watch
-            - **Self-contained release build** — full EXE now bundles the .NET 8 Desktop Runtime (no install needed)
-            - **Lite build** — small EXE for machines that already have the runtime
-            - Fixed: app shutdown could hang when OBS sources were still connected
-            - Fixed: malformed BLE heart rate packets could crash the app
-            - Fixed: Scan button stuck disabled after unexpected Bluetooth stop
-            - Fixed: port conflict on startup no longer kills the app
+            - **Per-device overlay URLs** — `http://localhost:8764/overlay/<DEVICE-ID>`
+            - **Self-contained & Lite release builds**
 
             **v1.0.0**
             - Initial release: single-watch BLE heart rate overlay for OBS

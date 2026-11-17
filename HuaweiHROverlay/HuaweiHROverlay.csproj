@@ -15,19 +15,23 @@
     <!-- WinRT interop for Bluetooth -->
     <CsWinRTEnabled>false</CsWinRTEnabled>
 
-    <!-- ── Single-file publish (runtime-dependent, requires .NET 8 Desktop Runtime) ── -->
+    <!-- ── Single-file publish defaults ── -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
     <!-- Include native WinRT interop dlls inside the single file -->
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
 
     <!-- Product metadata -->
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Company>HuaweiHROverlay</Company>
     <Product>Huawei HR Overlay for OBS</Product>
-    <Copyright>2025</Copyright>
+    <Copyright>2025-2026</Copyright>
     <Description>Real-time Huawei Watch/Band heart rate overlay for OBS Studio</Description>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(BuildVariant)' != ''">
+    <AssemblyMetadata Include="BuildVariant" Value="$(BuildVariant)" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Embed overlay.html as resource so it ships inside the single EXE -->

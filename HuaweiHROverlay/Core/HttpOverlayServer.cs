@@ -6,23 +6,25 @@ using System.Text.RegularExpressions;
 namespace HuaweiHROverlay.Core;
 
 /// <summary>
-/// Simple HTTP server that serves the OBS overlay HTML page.
-/// The overlay.html is embedded as a resource in the assembly.
+/// Simple HTTP server that serves the OBS overlay HTML page and telemetry status JSON.
 ///
 /// Endpoints:
-///   GET /                → overlay.html showing the most recent device
-///   GET /overlay/&lt;ID&gt;   → overlay.html locked to one device (12-hex Bluetooth address)
-///   GET /status          → {"bpm":N,"connected":bool,"device":"ID"} latest overall
+///   GET /                → overlay.html showing the most recent active device
+///   GET /overlay/&lt;ID&gt;   → overlay.html locked to one device
+///   GET /status          → {"bpm":N,"connected":bool,"device":"ID","name":"...","min":N,"max":N,"version":"..."}
 ///   GET /status?device=ID→ same, per device
 /// </summary>
 public class HttpOverlayServer : IAsyncDisposable
 {
+    private sealed record DeviceSnapshot(int Bpm, bool Connected, string Name, int MinBpm, int MaxBpm, DateTime UpdatedAtUtc);
+
     private readonly HttpListener _listener = new();
     private readonly object _stateLock = new();
-    private readonly Dictionary<string, (int bpm, bool connected)> _devices = [];
+    private readonly Dictionary<string, DeviceSnapshot> _devices = [];
     private CancellationTokenSource? _cts;
     private Task? _serveLoop;
     private string _cachedHtml = string.Empty;
+    private readonly string _version = GitHubUpdateService.GetCurrentVersionString();
 
     public const int Port = 8764;
     public string OverlayUrl => $"http://localhost:{Port}/";
@@ -36,17 +38,27 @@ public class HttpOverlayServer : IAsyncDisposable
         _serveLoop = ServeLoopAsync(_cts.Token);
     }
 
-    public void UpdateBpm(string deviceId, int bpm, bool connected)
+    public void UpdateBpm(string deviceId, int bpm, bool connected, string? deviceName = null)
     {
+        string key = deviceId.ToUpperInvariant();
         lock (_stateLock)
         {
-            _devices[deviceId.ToUpperInvariant()] = (bpm, connected);
+            bool existed = _devices.TryGetValue(key, out var prev);
+            string resolvedName = !string.IsNullOrWhiteSpace(deviceName)
+                ? deviceName
+                : (existed ? prev!.Name : key);
+
+            int min = existed ? prev!.MinBpm : 0;
+            int max = existed ? prev!.MaxBpm : 0;
+            if (bpm > 0)
+            {
+                min = min == 0 ? bpm : Math.Min(min, bpm);
+                max = Math.Max(max, bpm);
+            }
+
+            _devices[key] = new DeviceSnapshot(bpm, connected, resolvedName, min, max, DateTime.UtcNow);
         }
     }
-
-    // ──────────────────────────────────────────────
-    // Private
-    // ──────────────────────────────────────────────
 
     private async Task ServeLoopAsync(CancellationToken ct)
     {
@@ -66,14 +78,14 @@ public class HttpOverlayServer : IAsyncDisposable
         {
             var path = ctx.Request.Url?.AbsolutePath ?? "/";
             ctx.Response.Headers.Add("Access-Control-Allow-Origin", "*");
+            ctx.Response.Headers.Add("Cache-Control", "no-store");
 
             if (path == "/status")
             {
-                WriteResponse(ctx, 200, "application/json", StatusJson(GetQueryValue(ctx, "device")));
+                WriteResponse(ctx, 200, "application/json; charset=utf-8", StatusJson(GetQueryValue(ctx, "device")));
             }
             else
             {
-                // Serve overlay for any other path — /overlay/<ID> is picked up by the page itself
                 WriteResponse(ctx, 200, "text/html; charset=utf-8", _cachedHtml);
             }
         }
@@ -90,20 +102,34 @@ public class HttpOverlayServer : IAsyncDisposable
         {
             if (deviceId != null)
             {
-                var found = _devices.TryGetValue(deviceId, out var d);
-                return $"{{\"bpm\":{(found ? d.bpm : 0)},\"connected\":{(found && d.connected).ToString().ToLower()},\"device\":\"{deviceId}\"}}";
+                if (_devices.TryGetValue(deviceId, out var d))
+                {
+                    return BuildJson(d.Bpm, d.Connected, deviceId, d.Name, d.MinBpm, d.MaxBpm);
+                }
+                return BuildJson(0, false, deviceId, "", 0, 0);
             }
 
-            bool connected = _devices.Count > 0;
-            int bpm = 0;
-            string device = "";
-            foreach (var (id, state) in _devices)
+            // Pick the most recently updated connected device first
+            var active = _devices
+                .Where(kv => kv.Value.Connected && kv.Value.Bpm > 0)
+                .OrderByDescending(kv => kv.Value.UpdatedAtUtc)
+                .FirstOrDefault();
+
+            if (active.Key != null)
             {
-                if (state.bpm > 0) { bpm = state.bpm; device = id; }
+                var d = active.Value;
+                return BuildJson(d.Bpm, true, active.Key, d.Name, d.MinBpm, d.MaxBpm);
             }
-            return $"{{\"bpm\":{bpm},\"connected\":{connected.ToString().ToLower()},\"device\":\"{device}\"}}";
+
+            bool anyConnected = _devices.Values.Any(v => v.Connected);
+            return BuildJson(0, anyConnected, "", "", 0, 0);
         }
     }
+
+    private string BuildJson(int bpm, bool connected, string id, string name, int min, int max) =>
+        $"{{\"bpm\":{bpm},\"connected\":{connected.ToString().ToLowerInvariant()},\"device\":\"{Escape(id)}\",\"name\":\"{Escape(name)}\",\"min\":{min},\"max\":{max},\"version\":\"{Escape(_version)}\"}}";
+
+    private static string Escape(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
     private static string? GetQueryValue(HttpListenerContext ctx, string key)
     {
@@ -125,7 +151,6 @@ public class HttpOverlayServer : IAsyncDisposable
     private static string LoadEmbeddedOverlay()
     {
         var asm = Assembly.GetExecutingAssembly();
-        // Resource name is namespace.folder.filename
         var resourceName = asm.GetManifestResourceNames()
             .FirstOrDefault(n => n.EndsWith("overlay.html", StringComparison.OrdinalIgnoreCase));
 
@@ -140,8 +165,7 @@ public class HttpOverlayServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _cts?.Cancel();
-        // Stop first: a pending GetContextAsync only unblocks when the listener stops.
-        try { _listener.Stop(); } catch { /* never started or already stopped */ }
+        try { _listener.Stop(); } catch { }
         if (_serveLoop != null)
         {
             try { await _serveLoop; } catch { }

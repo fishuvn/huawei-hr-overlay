@@ -3,298 +3,690 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Heart Rate Overlay</title>
+<title>Huawei HR Overlay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
 <style>
-  /* ── Reset & Base ── */
+  :root {
+    --accent: #ff3b5c;
+    --accent-bright: #ff6b85;
+    --accent-glow: rgba(255, 59, 92, 0.48);
+    --accent-border: rgba(255, 75, 105, 0.36);
+    --accent-tint: rgba(255, 59, 92, 0.10);
+    --card-bg: rgba(11, 12, 20, 0.78);
+    --text-main: #f6f7fb;
+    --text-muted: rgba(206, 212, 232, 0.68);
+    --beat-duration: 1s;
+  }
+
+  /* HR Zone Adaptive Chromatic Tokens */
+  .zone-rest {
+    --accent: #38bdf8;
+    --accent-bright: #7dd3fc;
+    --accent-glow: rgba(56, 189, 248, 0.46);
+    --accent-border: rgba(56, 189, 248, 0.36);
+    --accent-tint: rgba(56, 189, 248, 0.10);
+  }
+  .zone-fat {
+    --accent: #34d399;
+    --accent-bright: #6ee7b7;
+    --accent-glow: rgba(52, 211, 153, 0.46);
+    --accent-border: rgba(52, 211, 153, 0.36);
+    --accent-tint: rgba(52, 211, 153, 0.10);
+  }
+  .zone-cardio {
+    --accent: #fbbf24;
+    --accent-bright: #fde68a;
+    --accent-glow: rgba(251, 191, 36, 0.48);
+    --accent-border: rgba(251, 191, 36, 0.40);
+    --accent-tint: rgba(251, 191, 36, 0.11);
+  }
+  .zone-peak {
+    --accent: #ff3b5c;
+    --accent-bright: #ff8096;
+    --accent-glow: rgba(255, 59, 92, 0.60);
+    --accent-border: rgba(255, 59, 92, 0.52);
+    --accent-tint: rgba(255, 59, 92, 0.15);
+  }
+
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  body {
+  html, body {
+    width: 100%;
+    height: 100%;
     background: transparent;
-    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
-    overflow: hidden;
+    padding: 8px 12px;
   }
+  body.align-left  { justify-content: flex-start; }
+  body.align-right { justify-content: flex-end; }
 
-  /* ── Main Widget Card ── */
+  /* ── Base Widget (Theme: Glass) ── */
   .widget {
-    display: flex;
+    position: relative;
+    display: inline-flex;
     align-items: center;
     gap: 14px;
-    padding: 14px 24px 14px 18px;
-    background: rgba(10, 10, 20, 0.72);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    border: 1px solid rgba(255, 80, 100, 0.35);
+    padding: 13px 20px 13px 16px;
+    background: var(--card-bg);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid var(--accent-border);
     border-radius: 18px;
     box-shadow:
-      0 0 0 1px rgba(255,255,255,0.05) inset,
-      0 8px 32px rgba(0,0,0,0.6),
-      0 0 24px rgba(255, 60, 80, 0.15);
-    transition: opacity 0.4s ease;
-    min-width: 160px;
-    position: relative;
+      0 1px 0 rgba(255, 255, 255, 0.08) inset,
+      0 10px 30px rgba(0, 0, 0, 0.55),
+      0 0 24px -4px var(--accent-glow);
+    transition:
+      opacity 0.35s ease,
+      transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 0.4s ease,
+      box-shadow 0.4s ease;
     overflow: hidden;
+    max-width: 100%;
   }
 
-  /* Glow shimmer on card */
   .widget::before {
     content: '';
     position: absolute;
     inset: 0;
-    border-radius: 18px;
-    background: linear-gradient(
-      135deg,
-      rgba(255,80,100,0.08) 0%,
-      transparent 60%,
-      rgba(255,40,70,0.05) 100%
+    background: radial-gradient(120% 100% at 0% 0%, var(--accent-tint) 0%, transparent 65%);
+    pointer-events: none;
+  }
+
+  /* ── Theme: Minimal (Frameless HUD over gameplay) ── */
+  body.theme-minimal .widget {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-color: transparent;
+    box-shadow: none;
+    padding: 6px 10px;
+  }
+  body.theme-minimal .widget::before { display: none; }
+  body.theme-minimal .bpm-value,
+  body.theme-minimal .meta-row,
+  body.theme-minimal .device-label,
+  body.theme-minimal .stats-col {
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.92)) drop-shadow(0 0 3px rgba(0, 0, 0, 0.85));
+  }
+
+  /* ── Theme: Neon (Cyber Broadcast) ── */
+  body.theme-neon .widget {
+    background: rgba(7, 8, 15, 0.88);
+    border-radius: 10px;
+    border: 1.5px solid var(--accent);
+    box-shadow:
+      0 0 18px var(--accent-glow),
+      0 0 4px var(--accent) inset,
+      0 10px 28px rgba(0, 0, 0, 0.7);
+  }
+  body.theme-neon .widget::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.02) 0px,
+      rgba(255, 255, 255, 0.02) 1px,
+      transparent 1px,
+      transparent 3px
     );
     pointer-events: none;
   }
 
-  .widget.disconnected {
-    opacity: 0.55;
-    border-color: rgba(120,120,140,0.3);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  /* ── Theme: Pill (Compact Capsule) ── */
+  body.theme-pill .widget {
+    border-radius: 999px;
+    padding: 9px 18px 9px 13px;
+    gap: 11px;
+  }
+  body.theme-pill .heart-wrap { width: 36px; height: 36px; }
+  body.theme-pill .heart-svg  { width: 24px; height: 24px; }
+  body.theme-pill .bpm-value  { font-size: 36px; }
+  body.theme-pill .ecg-wrap   { width: 64px; height: 30px; }
+
+  /* ── Connection States ── */
+  .widget.state-offline,
+  .widget.state-waiting {
+    border-color: rgba(148, 163, 184, 0.24);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  }
+  .widget.state-offline { opacity: 0.58; }
+  .widget.state-waiting { opacity: 0.78; }
+
+  body.autohide .widget.state-offline,
+  body.autohide .widget.state-waiting {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+    pointer-events: none;
   }
 
-  /* ── Heart Icon ── */
+  /* ── Heart Emblem + Concentric Pulse Rings ── */
   .heart-wrap {
     position: relative;
-    width: 46px;
-    height: 46px;
+    width: 44px;
+    height: 44px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  .heart-icon {
-    font-size: 36px;
-    line-height: 1;
-    filter: drop-shadow(0 0 8px rgba(255, 60, 80, 0.8));
+  .heart-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1.5px solid var(--accent);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .widget.state-live .heart-ring {
+    animation: ring-pulse var(--beat-duration) cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+  .widget.state-live .heart-ring.ring2 {
+    animation-delay: calc(var(--beat-duration) * 0.22);
+    border-width: 1px;
+  }
+
+  .heart-svg {
+    width: 30px;
+    height: 30px;
+    fill: var(--accent);
+    filter: drop-shadow(0 0 10px var(--accent-glow));
     transform-origin: center;
-    display: inline-block;
-    animation: heartbeat 1s ease-in-out infinite;
+    transition: fill 0.35s ease, filter 0.35s ease;
     will-change: transform;
   }
 
-  /* Ripple pulse ring around heart */
-  .heart-ring {
-    position: absolute;
-    inset: -4px;
-    border-radius: 50%;
-    border: 2px solid rgba(255, 60, 80, 0.5);
-    animation: ring-pulse 1s ease-out infinite;
-    will-change: transform, opacity;
+  .widget.state-live .heart-svg {
+    animation: lub-dub var(--beat-duration) ease-in-out infinite;
   }
-  .heart-ring.ring2 {
-    animation-delay: 0.25s;
-    border-color: rgba(255, 60, 80, 0.25);
+  .widget.state-waiting .heart-svg,
+  .widget.state-offline .heart-svg {
+    fill: #64748b;
+    filter: none;
+    animation: calm-breathe 2.8s ease-in-out infinite;
   }
 
-  /* Heartbeat: scale driven by JS via CSS custom property --bpm */
-  @keyframes heartbeat {
+  @keyframes lub-dub {
     0%   { transform: scale(1); }
-    14%  { transform: scale(1.22); }
-    28%  { transform: scale(1); }
-    42%  { transform: scale(1.14); }
-    70%  { transform: scale(1); }
+    13%  { transform: scale(1.24); }
+    26%  { transform: scale(1.02); }
+    39%  { transform: scale(1.15); }
+    65%  { transform: scale(1); }
     100% { transform: scale(1); }
   }
 
   @keyframes ring-pulse {
-    0%   { transform: scale(0.85); opacity: 0.8; }
-    100% { transform: scale(1.8); opacity: 0; }
+    0%   { transform: scale(0.75); opacity: 0.65; }
+    100% { transform: scale(1.65); opacity: 0; }
   }
 
-  /* ── BPM Text Area ── */
-  .bpm-area {
+  @keyframes calm-breathe {
+    0%, 100% { opacity: 0.45; transform: scale(0.96); }
+    50%      { opacity: 0.75; transform: scale(1.02); }
+  }
+
+  /* ── Primary BPM Readout ── */
+  .bpm-col {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    justify-content: center;
+    min-width: 72px;
+  }
+
+  .device-label {
+    display: none;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+    max-width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  body.show-name .device-label.has-text {
+    display: block;
+  }
+
+  .bpm-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
   }
 
   .bpm-value {
-    font-size: 48px;
+    font-size: 44px;
     font-weight: 800;
-    line-height: 1;
-    background: linear-gradient(135deg, #ff5070 0%, #ff2a4a 50%, #ff8090 100%);
+    line-height: 0.96;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+    background: linear-gradient(135deg, #ffffff 10%, var(--accent-bright) 55%, var(--accent) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    letter-spacing: -2px;
-    transition: transform 0.12s cubic-bezier(0.34,1.56,0.64,1);
-    filter: drop-shadow(0 0 12px rgba(255,60,80,0.5));
-    font-variant-numeric: tabular-nums;
+    filter: drop-shadow(0 0 14px var(--accent-glow));
+    transition: transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
-
+  .widget.state-offline .bpm-value,
+  .widget.state-waiting .bpm-value {
+    background: none;
+    -webkit-text-fill-color: #94a3b8;
+    color: #94a3b8;
+    filter: none;
+  }
   .bpm-value.bump {
-    transform: scale(1.08);
+    transform: scale(1.06);
   }
 
   .bpm-unit {
     font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 2.5px;
-    text-transform: uppercase;
-    color: rgba(255, 150, 160, 0.7);
-    margin-top: 1px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--text-muted);
   }
 
-  /* ── Status Dot ── */
+  .meta-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
   .status-dot {
-    position: absolute;
-    top: 10px;
-    right: 12px;
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
-    background: #22dd55;
-    box-shadow: 0 0 6px #22dd55;
-    transition: background 0.3s, box-shadow 0.3s;
+    background: #22c55e;
+    box-shadow: 0 0 7px #22c55e;
+    flex-shrink: 0;
+    transition: background 0.3s ease, box-shadow 0.3s ease;
   }
-
-  .disconnected .status-dot {
-    background: #888;
+  .widget.state-waiting .status-dot {
+    background: #f59e0b;
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.7);
+  }
+  .widget.state-offline .status-dot {
+    background: #64748b;
     box-shadow: none;
   }
 
-  /* ── Disconnected state text ── */
-  .no-signal {
-    font-size: 12px;
-    color: rgba(200,200,220,0.5);
-    font-weight: 500;
-    letter-spacing: 0.5px;
+  .zone-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-bright);
+    white-space: nowrap;
+  }
+  .widget.state-waiting .zone-badge,
+  .widget.state-offline .zone-badge {
+    color: rgba(148, 163, 184, 0.8);
+  }
+  body.hide-zone .meta-row {
+    display: none;
   }
 
-  /* ── Zone color themes (applied to heart + bpm dynamically) ── */
-  .zone-rest    .heart-icon { filter: drop-shadow(0 0 8px rgba(60,140,255,0.8)); }
-  .zone-fat     .heart-icon { filter: drop-shadow(0 0 8px rgba(60,220,180,0.8)); }
-  .zone-cardio  .heart-icon { filter: drop-shadow(0 0 8px rgba(255,200,50,0.8)); }
-  .zone-peak    .heart-icon { filter: drop-shadow(0 0 8px rgba(255,80,40,0.9)); }
+  /* ── Live Cardiac ECG Canvas ── */
+  .ecg-wrap {
+    width: 86px;
+    height: 38px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    opacity: 0.92;
+  }
+  body.hide-ecg .ecg-wrap {
+    display: none;
+  }
+  .ecg-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
 
+  /* ── Optional Session Min/Max Stats ── */
+  .stats-col {
+    display: none;
+    flex-direction: column;
+    gap: 3px;
+    padding-left: 10px;
+    border-left: 1px solid rgba(255, 255, 255, 0.09);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  body.show-stats .stats-col {
+    display: flex;
+  }
+  .stat-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .stat-label { opacity: 0.65; font-size: 9px; }
+  .stat-val   { color: var(--text-main); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .heart-ring { display: none; }
+    .widget.state-live .heart-svg { animation-duration: 2s; }
+  }
 </style>
-<!-- Google Fonts: Inter -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@600;800&display=swap" rel="stylesheet">
 </head>
 <body>
 
-<div class="widget disconnected" id="widget">
-  <div class="status-dot" id="statusDot"></div>
-  <div class="heart-wrap">
+<div class="widget state-offline" id="widget" role="status" aria-live="polite">
+  <div class="heart-wrap" aria-hidden="true">
     <div class="heart-ring"></div>
     <div class="heart-ring ring2"></div>
-    <span class="heart-icon" id="heartIcon">❤️</span>
+    <svg class="heart-svg" viewBox="0 0 24 24">
+      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+    </svg>
   </div>
-  <div class="bpm-area">
-    <div class="bpm-value" id="bpmValue">--</div>
-    <div class="bpm-unit">BPM</div>
+
+  <div class="bpm-col">
+    <div class="device-label" id="deviceLabel"></div>
+    <div class="bpm-row">
+      <span class="bpm-value" id="bpmValue">--</span>
+      <span class="bpm-unit">BPM</span>
+    </div>
+    <div class="meta-row">
+      <span class="status-dot"></span>
+      <span class="zone-badge" id="zoneBadge">OFFLINE</span>
+    </div>
+  </div>
+
+  <div class="ecg-wrap" aria-hidden="true">
+    <canvas class="ecg-canvas" id="ecgCanvas"></canvas>
+  </div>
+
+  <div class="stats-col" id="statsCol">
+    <div class="stat-item"><span class="stat-label">MIN</span><span class="stat-val" id="minVal">--</span></div>
+    <div class="stat-item"><span class="stat-label">MAX</span><span class="stat-val" id="maxVal">--</span></div>
   </div>
 </div>
 
 <script>
-// ── Configuration ──────────────────────────────────────────────────
-// Device targeting: /overlay/<ID> path or ?device=<ID> query param.
-// With no device the page shows the most recent update from any device.
-const pathMatch = location.pathname.match(/^\/overlay\/([0-9A-Fa-f]{6,16})\/?$/);
-const DEVICE_ID = (pathMatch ? pathMatch[1] : (new URLSearchParams(location.search).get('device') || ''))
-  .toUpperCase() || null;
-const RECONNECT_DELAY_MS = 3000;
-const WS_URL = 'ws://localhost:8765/' + (DEVICE_ID ? '?device=' + encodeURIComponent(DEVICE_ID) : '');
+(() => {
+  // ── Parse URL & Query Customization ──────────────────────────────────
+  const params = new URLSearchParams(location.search);
+  const pathMatch = location.pathname.match(/^\/overlay\/([A-Za-z0-9_-]{2,32})\/?$/);
+  const DEVICE_ID = (pathMatch ? pathMatch[1] : (params.get('device') || '')).trim().toUpperCase() || null;
 
-// ── DOM refs ───────────────────────────────────────────────────────
-const widget    = document.getElementById('widget');
-const bpmValue  = document.getElementById('bpmValue');
-const heartIcon = document.getElementById('heartIcon');
+  const theme = (params.get('theme') || 'glass').toLowerCase();
+  if (['glass', 'minimal', 'neon', 'pill'].includes(theme)) {
+    document.body.classList.add('theme-' + theme);
+  }
 
-// ── State ─────────────────────────────────────────────────────────
-let ws        = null;
-let currentBpm = 0;
-let animFrameId = null;
+  const align = (params.get('align') || 'center').toLowerCase();
+  if (align === 'left' || align === 'right') {
+    document.body.classList.add('align-' + align);
+  }
 
-// ── WebSocket connection ───────────────────────────────────────────
-function connect() {
-  ws = new WebSocket(WS_URL);
+  const showEcg   = params.get('ecg') !== '0';
+  const showZone  = params.get('zone') !== '0';
+  const showStats = params.get('stats') === '1';
+  const customLbl = (params.get('label') || '').trim();
+  const showName  = params.get('name') === '1' || customLbl.length > 0;
+  const autoHide  = params.get('autohide') === '1';
 
-  ws.addEventListener('open', () => {
-    setConnected(true);
-    console.log('[HR Overlay] WebSocket connected');
-  });
+  if (!showEcg)  document.body.classList.add('hide-ecg');
+  if (!showZone) document.body.classList.add('hide-zone');
+  if (showStats) document.body.classList.add('show-stats');
+  if (showName)  document.body.classList.add('show-name');
+  if (autoHide)  document.body.classList.add('autohide');
 
-  ws.addEventListener('message', (evt) => {
+  const WS_URL = 'ws://' + (location.hostname || 'localhost') + ':8765/' +
+    (DEVICE_ID ? '?device=' + encodeURIComponent(DEVICE_ID) : '');
+  const STATUS_URL = '/status' + (DEVICE_ID ? '?device=' + encodeURIComponent(DEVICE_ID) : '');
+
+  // ── DOM Elements ─────────────────────────────────────────────────────
+  const widget      = document.getElementById('widget');
+  const bpmValue    = document.getElementById('bpmValue');
+  const zoneBadge   = document.getElementById('zoneBadge');
+  const deviceLabel = document.getElementById('deviceLabel');
+  const minValEl    = document.getElementById('minVal');
+  const maxValEl    = document.getElementById('maxVal');
+  const ecgCanvas   = document.getElementById('ecgCanvas');
+
+  if (customLbl) {
+    deviceLabel.textContent = customLbl;
+    deviceLabel.classList.add('has-text');
+  }
+
+  // ── Telemetry State ──────────────────────────────────────────────────
+  let ws = null;
+  let wsOpen = false;
+  let currentBpm = 0;
+  let minBpm = 0;
+  let maxBpm = 0;
+  let reconnectTimer = null;
+  let bumpTimer = null;
+
+  const ZONES = ['zone-rest', 'zone-fat', 'zone-cardio', 'zone-peak'];
+  const STATES = ['state-offline', 'state-waiting', 'state-live'];
+
+  function setWidgetState(stateName, badgeText) {
+    widget.classList.remove(...STATES);
+    widget.classList.add(stateName);
+    if (badgeText) zoneBadge.textContent = badgeText;
+  }
+
+  function applyReading(bpm, deviceName, serverMin, serverMax) {
+    if (!customLbl && deviceName) {
+      deviceLabel.textContent = deviceName;
+      deviceLabel.classList.add('has-text');
+    }
+
+    if (typeof bpm !== 'number' || bpm <= 0) {
+      currentBpm = 0;
+      bpmValue.textContent = '--';
+      widget.classList.remove(...ZONES);
+      setWidgetState(wsOpen ? 'state-waiting' : 'state-offline', wsOpen ? 'WAITING' : 'OFFLINE');
+      return;
+    }
+
+    const changed = bpm !== currentBpm;
+    currentBpm = bpm;
+    bpmValue.textContent = String(bpm);
+
+    minBpm = serverMin > 0 ? serverMin : (minBpm === 0 ? bpm : Math.min(minBpm, bpm));
+    maxBpm = serverMax > 0 ? Math.max(serverMax, bpm) : Math.max(maxBpm, bpm);
+    minValEl.textContent = String(minBpm);
+    maxValEl.textContent = String(maxBpm);
+
+    if (changed) {
+      bpmValue.classList.remove('bump');
+      void bpmValue.offsetWidth;
+      bpmValue.classList.add('bump');
+      clearTimeout(bumpTimer);
+      bumpTimer = setTimeout(() => bpmValue.classList.remove('bump'), 180);
+    }
+
+    const beatSec = Math.min(1.35, Math.max(0.28, 60 / bpm));
+    widget.style.setProperty('--beat-duration', beatSec.toFixed(3) + 's');
+
+    widget.classList.remove(...ZONES);
+    let zoneLabel = 'REST';
+    if (bpm < 100) {
+      widget.classList.add('zone-rest');
+      zoneLabel = 'REST ZONE';
+    } else if (bpm < 130) {
+      widget.classList.add('zone-fat');
+      zoneLabel = 'FAT BURN';
+    } else if (bpm < 160) {
+      widget.classList.add('zone-cardio');
+      zoneLabel = 'CARDIO';
+    } else {
+      widget.classList.add('zone-peak');
+      zoneLabel = 'PEAK ZONE';
+    }
+
+    setWidgetState('state-live', zoneLabel);
+  }
+
+  async function hydrateInitialStatus() {
     try {
-      const data = JSON.parse(evt.data);
-      if (DEVICE_ID && data.id !== DEVICE_ID) return;
-      if (typeof data.bpm === 'number' && data.bpm > 0) {
-        updateBpm(data.bpm);
+      const resp = await fetch(STATUS_URL, { cache: 'no-store' });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (data && data.connected && data.bpm > 0) {
+        applyReading(data.bpm, data.name || data.device, data.min || 0, data.max || 0);
+      } else if (wsOpen && currentBpm === 0) {
+        setWidgetState('state-waiting', 'WAITING');
       }
-    } catch(e) { /* ignore malformed */ }
-  });
-
-  ws.addEventListener('close', () => {
-    setConnected(false);
-    setTimeout(connect, RECONNECT_DELAY_MS);
-  });
-
-  ws.addEventListener('error', () => {
-    ws.close();
-  });
-}
-
-// ── Update display ─────────────────────────────────────────────────
-function updateBpm(bpm) {
-  const changed = bpm !== currentBpm;
-  currentBpm = bpm;
-
-  bpmValue.textContent = bpm;
-
-  if (changed) {
-    // Micro-animation: bump scale on new value
-    bpmValue.classList.remove('bump');
-    void bpmValue.offsetWidth; // reflow trigger
-    bpmValue.classList.add('bump');
-    setTimeout(() => bpmValue.classList.remove('bump'), 200);
+    } catch (_) { /* ignore when opened outside HTTP server */ }
   }
 
-  // Adjust heart animation speed based on BPM
-  // 60 BPM → 1.0s; 120 BPM → 0.5s; 180 BPM → 0.33s
-  const beatDuration = Math.max(0.3, 60 / bpm);
-  heartIcon.style.animationDuration = `${beatDuration}s`;
+  function connectWs() {
+    clearTimeout(reconnectTimer);
+    try {
+      ws = new WebSocket(WS_URL);
+    } catch (_) {
+      reconnectTimer = setTimeout(connectWs, 2500);
+      return;
+    }
 
-  // Adjust ring pulse speed to match
-  document.querySelectorAll('.heart-ring').forEach(r => {
-    r.style.animationDuration = `${beatDuration}s`;
-  });
+    ws.addEventListener('open', () => {
+      wsOpen = true;
+      if (currentBpm === 0) setWidgetState('state-waiting', 'WAITING');
+      hydrateInitialStatus();
+    });
 
-  // Zone coloring
-  updateZone(bpm);
-}
+    ws.addEventListener('message', (evt) => {
+      try {
+        const data = JSON.parse(evt.data);
+        const msgId = String(data.id || '').toUpperCase();
+        if (DEVICE_ID && msgId && msgId !== DEVICE_ID) return;
 
-function updateZone(bpm) {
-  const zones = ['zone-rest', 'zone-fat', 'zone-cardio', 'zone-peak'];
-  widget.classList.remove(...zones);
-  if      (bpm < 100) widget.classList.add('zone-rest');
-  else if (bpm < 130) widget.classList.add('zone-fat');
-  else if (bpm < 160) widget.classList.add('zone-cardio');
-  else                widget.classList.add('zone-peak');
-}
+        if (data.connected === false || data.bpm === 0) {
+          applyReading(0, data.device || '');
+        } else if (typeof data.bpm === 'number' && data.bpm > 0) {
+          applyReading(data.bpm, data.device || '', 0, 0);
+        }
+      } catch (_) { /* ignore malformed frame */ }
+    });
 
-function setConnected(connected) {
-  if (connected) {
-    widget.classList.remove('disconnected');
-  } else {
-    widget.classList.add('disconnected');
-    bpmValue.textContent = '--';
-    currentBpm = 0;
+    ws.addEventListener('close', () => {
+      wsOpen = false;
+      currentBpm = 0;
+      bpmValue.textContent = '--';
+      widget.classList.remove(...ZONES);
+      setWidgetState('state-offline', 'OFFLINE');
+      reconnectTimer = setTimeout(connectWs, 2500);
+    });
+
+    ws.addEventListener('error', () => {
+      try { ws.close(); } catch (_) {}
+    });
   }
-}
 
-// ── Boot ───────────────────────────────────────────────────────────
-connect();
+  // ── Smooth Real-Time Cardiac P-QRS-T Waveform Renderer ───────────────
+  if (showEcg && ecgCanvas) {
+    const ctx = ecgCanvas.getContext('2d');
+    const samples = new Float32Array(90);
+    let phase = 0;
+    let lastTs = performance.now();
+
+    function pqrstSample(p) {
+      // p in [0, 1): realistic P-wave, Q-dip, sharp R-spike, S-dip, T-wave
+      if (p > 0.10 && p < 0.20) return 0.18 * Math.sin(((p - 0.10) / 0.10) * Math.PI);
+      if (p >= 0.24 && p < 0.28) return -0.18 * Math.sin(((p - 0.24) / 0.04) * Math.PI);
+      if (p >= 0.28 && p < 0.34) return 0.96 * Math.sin(((p - 0.28) / 0.06) * Math.PI);
+      if (p >= 0.34 && p < 0.39) return -0.32 * Math.sin(((p - 0.34) / 0.05) * Math.PI);
+      if (p >= 0.48 && p < 0.64) return 0.28 * Math.sin(((p - 0.48) / 0.16) * Math.PI);
+      return 0;
+    }
+
+    function accentColor() {
+      if (currentBpm <= 0) return '#64748b';
+      if (currentBpm < 100) return '#38bdf8';
+      if (currentBpm < 130) return '#34d399';
+      if (currentBpm < 160) return '#fbbf24';
+      return '#ff3b5c';
+    }
+
+    function renderEcg(now) {
+      const dt = Math.min(0.05, Math.max(0.001, (now - lastTs) / 1000));
+      lastTs = now;
+
+      const dpr = window.devicePixelRatio || 1;
+      const w = ecgCanvas.clientWidth || 86;
+      const h = ecgCanvas.clientHeight || 38;
+      if (ecgCanvas.width !== Math.round(w * dpr) || ecgCanvas.height !== Math.round(h * dpr)) {
+        ecgCanvas.width = Math.round(w * dpr);
+        ecgCanvas.height = Math.round(h * dpr);
+      }
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+
+      // Shift buffer & push new sample at ~60Hz visual cadence
+      samples.copyWithin(0, 1);
+      if (currentBpm > 0) {
+        const beatsPerSec = currentBpm / 60;
+        phase = (phase + dt * beatsPerSec) % 1;
+        samples[samples.length - 1] = pqrstSample(phase);
+      } else {
+        samples[samples.length - 1] = 0;
+      }
+
+      const color = accentColor();
+      const midY = h * 0.58;
+      const amp = h * 0.42;
+
+      const grad = ctx.createLinearGradient(0, 0, w, 0);
+      grad.addColorStop(0.0, 'rgba(255,255,255,0)');
+      grad.addColorStop(0.25, color + '55');
+      grad.addColorStop(1.0, color);
+
+      ctx.beginPath();
+      for (let i = 0; i < samples.length; i++) {
+        const x = (i / (samples.length - 1)) * (w - 5);
+        const y = midY - samples[i] * amp;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Leading pulse head dot
+      const headX = w - 5;
+      const headY = midY - samples[samples.length - 1] * amp;
+      ctx.beginPath();
+      ctx.arc(headX, headY, currentBpm > 0 ? 2.6 : 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+
+      requestAnimationFrame(renderEcg);
+    }
+
+    requestAnimationFrame(renderEcg);
+  }
+
+  hydrateInitialStatus();
+  connectWs();
+})();
 </script>
 </body>
 </html>
