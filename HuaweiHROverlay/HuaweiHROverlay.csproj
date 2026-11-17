@@ -1,32 +1,35 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- Use Windows WinRT TFM when building for win-* RID (or on Windows with no RID); pure net8.0 on Linux & macOS -->
+    <IsWindowsTarget Condition="'$(RuntimeIdentifier)' != '' and $(RuntimeIdentifier.StartsWith('win'))">true</IsWindowsTarget>
+    <IsWindowsTarget Condition="'$(RuntimeIdentifier)' == '' and '$(OS)' == 'Windows_NT'">true</IsWindowsTarget>
+
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
-    <UseWPF>true</UseWPF>
+    <TargetFramework Condition="'$(IsWindowsTarget)' == 'true'">net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework Condition="'$(IsWindowsTarget)' != 'true'">net8.0</TargetFramework>
+    <DefineConstants Condition="'$(IsWindowsTarget)' == 'true'">$(DefineConstants);WINDOWS_BLE</DefineConstants>
+
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+
     <RootNamespace>HuaweiHROverlay</RootNamespace>
     <AssemblyName>HuaweiHROverlay</AssemblyName>
     <ApplicationIcon>Assets\heart.ico</ApplicationIcon>
-    <Platforms>x64</Platforms>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <!-- WinRT interop for Bluetooth -->
-    <CsWinRTEnabled>false</CsWinRTEnabled>
-
-    <!-- ── Single-file publish defaults ── -->
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>false</SelfContained>
-    <!-- Include native WinRT interop dlls inside the single file -->
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
 
     <!-- Product metadata -->
-    <Version>1.2.0</Version>
+    <Version>2.0.0</Version>
     <Company>HuaweiHROverlay</Company>
     <Product>Huawei HR Overlay for OBS</Product>
     <Copyright>2025-2026</Copyright>
-    <Description>Real-time Huawei Watch/Band heart rate overlay for OBS Studio</Description>
+    <Description>Cross-platform real-time Huawei Watch/Band BLE heart rate overlay for OBS Studio (Windows, Linux, macOS)</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsWindowsTarget)' == 'true'">
+    <CsWinRTEnabled>false</CsWinRTEnabled>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(BuildVariant)' != ''">
@@ -34,14 +37,19 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Embed overlay.html as resource so it ships inside the single EXE -->
+    <!-- Embed overlay.html so HTTP server serves it from single-file binaries on every OS -->
     <EmbeddedResource Include="Assets\overlay.html" />
-    <!-- Include icon in build -->
-    <None Include="Assets\heart.ico" />
+    <AvaloniaResource Include="Assets\heart.ico" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Windows Community Toolkit for BLE notifications in non-UWP apps -->
+    <PackageReference Include="Avalonia" Version="11.3.23" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.23" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.23" />
+    <PackageReference Include="Tmds.DBus" Version="0.95.2" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(IsWindowsTarget)' == 'true'">
     <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.1.3" />
   </ItemGroup>
 

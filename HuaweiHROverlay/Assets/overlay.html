@@ -6,58 +6,58 @@
 <title>Huawei HR Overlay</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@600;700&family=IBM+Plex+Mono:wght@600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --accent: #ff3b5c;
-    --accent-bright: #ff6b85;
-    --accent-glow: rgba(255, 59, 92, 0.48);
-    --accent-border: rgba(255, 75, 105, 0.36);
-    --accent-tint: rgba(255, 59, 92, 0.10);
-    --card-bg: rgba(11, 12, 20, 0.78);
-    --text-main: #f6f7fb;
-    --text-muted: rgba(206, 212, 232, 0.68);
+    --accent: #ff4766;
+    --accent-badge: #ff8fa3;
+    --accent-border: rgba(255, 92, 122, 0.42);
+    --accent-tint: rgba(255, 71, 102, 0.10);
+    --card-bg: #0c0e16;
+    --text-main: #f8fafc;
+    --text-secondary: #cbd5e1;
     --beat-duration: 1s;
   }
 
-  /* HR Zone Adaptive Chromatic Tokens */
+  /* Adaptive HR Zone Tokens — high-contrast text paired with distinct hue */
   .zone-rest {
     --accent: #38bdf8;
-    --accent-bright: #7dd3fc;
-    --accent-glow: rgba(56, 189, 248, 0.46);
-    --accent-border: rgba(56, 189, 248, 0.36);
+    --accent-badge: #7dd3fc;
+    --accent-border: rgba(56, 189, 248, 0.42);
     --accent-tint: rgba(56, 189, 248, 0.10);
   }
   .zone-fat {
     --accent: #34d399;
-    --accent-bright: #6ee7b7;
-    --accent-glow: rgba(52, 211, 153, 0.46);
-    --accent-border: rgba(52, 211, 153, 0.36);
+    --accent-badge: #6ee7b7;
+    --accent-border: rgba(52, 211, 153, 0.42);
     --accent-tint: rgba(52, 211, 153, 0.10);
   }
   .zone-cardio {
     --accent: #fbbf24;
-    --accent-bright: #fde68a;
-    --accent-glow: rgba(251, 191, 36, 0.48);
-    --accent-border: rgba(251, 191, 36, 0.40);
+    --accent-badge: #fcd34d;
+    --accent-border: rgba(251, 191, 36, 0.45);
     --accent-tint: rgba(251, 191, 36, 0.11);
   }
   .zone-peak {
-    --accent: #ff3b5c;
-    --accent-bright: #ff8096;
-    --accent-glow: rgba(255, 59, 92, 0.60);
-    --accent-border: rgba(255, 59, 92, 0.52);
-    --accent-tint: rgba(255, 59, 92, 0.15);
+    --accent: #ff4766;
+    --accent-badge: #fda4af;
+    --accent-border: rgba(255, 71, 102, 0.55);
+    --accent-tint: rgba(255, 71, 102, 0.14);
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  ::selection {
+    background: var(--accent);
+    color: #0c0e16;
+  }
 
   html, body {
     width: 100%;
     height: 100%;
     background: transparent;
     overflow: hidden;
-    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: 'Barlow', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
 
@@ -70,27 +70,26 @@
   body.align-left  { justify-content: flex-start; }
   body.align-right { justify-content: flex-end; }
 
-  /* ── Base Widget (Theme: Glass) ── */
+  /* ── Broadcast Card (Theme: Glass / Default) ── */
   .widget {
     position: relative;
     display: inline-flex;
     align-items: center;
     gap: 14px;
     padding: 13px 20px 13px 16px;
-    background: var(--card-bg);
-    backdrop-filter: blur(18px) saturate(140%);
-    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    background-color: #0c0e16;
+    background: rgba(12, 14, 22, 0.90);
+    backdrop-filter: blur(16px) saturate(135%);
+    -webkit-backdrop-filter: blur(16px) saturate(135%);
     border: 1px solid var(--accent-border);
-    border-radius: 18px;
+    border-radius: 16px;
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.08) inset,
-      0 10px 30px rgba(0, 0, 0, 0.55),
-      0 0 24px -4px var(--accent-glow);
+      0 12px 28px rgba(0, 0, 0, 0.56);
     transition:
-      opacity 0.35s ease,
-      transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
-      border-color 0.4s ease,
-      box-shadow 0.4s ease;
+      opacity 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 0.35s ease;
     overflow: hidden;
     max-width: 100%;
   }
@@ -105,43 +104,20 @@
 
   /* ── Theme: Minimal (Frameless HUD over gameplay) ── */
   body.theme-minimal .widget {
-    background: transparent;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    background-color: rgba(12, 14, 22, 0.72);
     border-color: transparent;
-    box-shadow: none;
-    padding: 6px 10px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    padding: 8px 14px;
   }
   body.theme-minimal .widget::before { display: none; }
-  body.theme-minimal .bpm-value,
-  body.theme-minimal .meta-row,
-  body.theme-minimal .device-label,
-  body.theme-minimal .stats-col {
-    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.92)) drop-shadow(0 0 3px rgba(0, 0, 0, 0.85));
-  }
 
-  /* ── Theme: Neon (Cyber Broadcast) ── */
+  /* ── Theme: Neon (Crisp Broadcast Frame) ── */
   body.theme-neon .widget {
-    background: rgba(7, 8, 15, 0.88);
+    background-color: #090b12;
+    background: rgba(9, 11, 18, 0.94);
     border-radius: 10px;
     border: 1.5px solid var(--accent);
-    box-shadow:
-      0 0 18px var(--accent-glow),
-      0 0 4px var(--accent) inset,
-      0 10px 28px rgba(0, 0, 0, 0.7);
-  }
-  body.theme-neon .widget::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: repeating-linear-gradient(
-      0deg,
-      rgba(255, 255, 255, 0.02) 0px,
-      rgba(255, 255, 255, 0.02) 1px,
-      transparent 1px,
-      transparent 3px
-    );
-    pointer-events: none;
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.68);
   }
 
   /* ── Theme: Pill (Compact Capsule) ── */
@@ -152,30 +128,27 @@
   }
   body.theme-pill .heart-wrap { width: 36px; height: 36px; }
   body.theme-pill .heart-svg  { width: 24px; height: 24px; }
-  body.theme-pill .bpm-value  { font-size: 36px; }
+  body.theme-pill .bpm-value  { font-size: 34px; }
   body.theme-pill .ecg-wrap   { width: 64px; height: 30px; }
 
   /* ── Connection States ── */
   .widget.state-offline,
   .widget.state-waiting {
-    border-color: rgba(148, 163, 184, 0.24);
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    border-color: rgba(148, 163, 184, 0.28);
   }
-  .widget.state-offline { opacity: 0.58; }
-  .widget.state-waiting { opacity: 0.78; }
 
   body.autohide .widget.state-offline,
   body.autohide .widget.state-waiting {
     opacity: 0;
-    transform: translateY(6px) scale(0.97);
+    transform: translateY(6px) scale(0.98);
     pointer-events: none;
   }
 
   /* ── Heart Emblem + Concentric Pulse Rings ── */
   .heart-wrap {
     position: relative;
-    width: 44px;
-    height: 44px;
+    width: 42px;
+    height: 42px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -200,12 +173,11 @@
   }
 
   .heart-svg {
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     fill: var(--accent);
-    filter: drop-shadow(0 0 10px var(--accent-glow));
     transform-origin: center;
-    transition: fill 0.35s ease, filter 0.35s ease;
+    transition: fill 0.3s ease;
     will-change: transform;
   }
 
@@ -214,28 +186,27 @@
   }
   .widget.state-waiting .heart-svg,
   .widget.state-offline .heart-svg {
-    fill: #64748b;
-    filter: none;
+    fill: #94a3b8;
     animation: calm-breathe 2.8s ease-in-out infinite;
   }
 
   @keyframes lub-dub {
     0%   { transform: scale(1); }
-    13%  { transform: scale(1.24); }
+    13%  { transform: scale(1.22); }
     26%  { transform: scale(1.02); }
-    39%  { transform: scale(1.15); }
+    39%  { transform: scale(1.14); }
     65%  { transform: scale(1); }
     100% { transform: scale(1); }
   }
 
   @keyframes ring-pulse {
-    0%   { transform: scale(0.75); opacity: 0.65; }
-    100% { transform: scale(1.65); opacity: 0; }
+    0%   { transform: scale(0.76); opacity: 0.62; }
+    100% { transform: scale(1.62); opacity: 0; }
   }
 
   @keyframes calm-breathe {
-    0%, 100% { opacity: 0.45; transform: scale(0.96); }
-    50%      { opacity: 0.75; transform: scale(1.02); }
+    0%, 100% { opacity: 0.55; transform: scale(0.96); }
+    50%      { opacity: 0.85; transform: scale(1.02); }
   }
 
   /* ── Primary BPM Readout ── */
@@ -243,18 +214,18 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    min-width: 72px;
+    min-width: 74px;
   }
 
   .device-label {
     display: none;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.09em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     margin-bottom: 2px;
-    max-width: 140px;
+    max-width: 145px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -270,34 +241,28 @@
   }
 
   .bpm-value {
-    font-size: 44px;
-    font-weight: 800;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 42px;
+    font-weight: 700;
     line-height: 0.96;
-    letter-spacing: -0.04em;
+    letter-spacing: -0.03em;
     font-variant-numeric: tabular-nums;
-    background: linear-gradient(135deg, #ffffff 10%, var(--accent-bright) 55%, var(--accent) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    filter: drop-shadow(0 0 14px var(--accent-glow));
-    transition: transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1);
+    color: var(--text-main);
+    transition: transform 0.14s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .widget.state-offline .bpm-value,
   .widget.state-waiting .bpm-value {
-    background: none;
-    -webkit-text-fill-color: #94a3b8;
-    color: #94a3b8;
-    filter: none;
+    color: #cbd5e1;
   }
   .bpm-value.bump {
-    transform: scale(1.06);
+    transform: scale(1.05);
   }
 
   .bpm-unit {
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.14em;
-    color: var(--text-muted);
+    letter-spacing: 0.10em;
+    color: var(--text-secondary);
   }
 
   .meta-row {
@@ -312,30 +277,27 @@
     height: 6px;
     border-radius: 50%;
     background: #22c55e;
-    box-shadow: 0 0 7px #22c55e;
     flex-shrink: 0;
-    transition: background 0.3s ease, box-shadow 0.3s ease;
+    transition: background 0.3s ease;
   }
   .widget.state-waiting .status-dot {
     background: #f59e0b;
-    box-shadow: 0 0 6px rgba(245, 158, 11, 0.7);
   }
   .widget.state-offline .status-dot {
-    background: #64748b;
-    box-shadow: none;
+    background: #94a3b8;
   }
 
   .zone-badge {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--accent-bright);
+    color: var(--accent-badge);
     white-space: nowrap;
   }
   .widget.state-waiting .zone-badge,
   .widget.state-offline .zone-badge {
-    color: rgba(148, 163, 184, 0.8);
+    color: #cbd5e1;
   }
   body.hide-zone .meta-row {
     display: none;
@@ -348,7 +310,6 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    opacity: 0.92;
   }
   body.hide-ecg .ecg-wrap {
     display: none;
@@ -364,12 +325,12 @@
     display: none;
     flex-direction: column;
     gap: 3px;
-    padding-left: 10px;
-    border-left: 1px solid rgba(255, 255, 255, 0.09);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    padding-left: 11px;
+    border-left: 1px solid rgba(255, 255, 255, 0.14);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-variant-numeric: tabular-nums;
   }
   body.show-stats .stats-col {
@@ -378,10 +339,10 @@
   .stat-item {
     display: flex;
     justify-content: space-between;
-    gap: 6px;
+    gap: 7px;
     white-space: nowrap;
   }
-  .stat-label { opacity: 0.65; font-size: 9px; }
+  .stat-label { color: #cbd5e1; font-size: 11px; }
   .stat-val   { color: var(--text-main); }
 
   @media (prefers-reduced-motion: reduce) {
@@ -425,9 +386,8 @@
 
 <script>
 (() => {
-  // ── Parse URL & Query Customization ──────────────────────────────────
   const params = new URLSearchParams(location.search);
-  const pathMatch = location.pathname.match(/^\/overlay\/([A-Za-z0-9_-]{2,32})\/?$/);
+  const pathMatch = location.pathname.match(/^\/overlay\/([A-Za-z0-9_-]{2,36})\/?$/);
   const DEVICE_ID = (pathMatch ? pathMatch[1] : (params.get('device') || '')).trim().toUpperCase() || null;
 
   const theme = (params.get('theme') || 'glass').toLowerCase();
@@ -457,7 +417,6 @@
     (DEVICE_ID ? '?device=' + encodeURIComponent(DEVICE_ID) : '');
   const STATUS_URL = '/status' + (DEVICE_ID ? '?device=' + encodeURIComponent(DEVICE_ID) : '');
 
-  // ── DOM Elements ─────────────────────────────────────────────────────
   const widget      = document.getElementById('widget');
   const bpmValue    = document.getElementById('bpmValue');
   const zoneBadge   = document.getElementById('zoneBadge');
@@ -471,7 +430,6 @@
     deviceLabel.classList.add('has-text');
   }
 
-  // ── Telemetry State ──────────────────────────────────────────────────
   let ws = null;
   let wsOpen = false;
   let currentBpm = 0;
@@ -552,7 +510,7 @@
       } else if (wsOpen && currentBpm === 0) {
         setWidgetState('state-waiting', 'WAITING');
       }
-    } catch (_) { /* ignore when opened outside HTTP server */ }
+    } catch (_) { /* ignore when opened standalone */ }
   }
 
   function connectWs() {
@@ -598,7 +556,6 @@
     });
   }
 
-  // ── Smooth Real-Time Cardiac P-QRS-T Waveform Renderer ───────────────
   if (showEcg && ecgCanvas) {
     const ctx = ecgCanvas.getContext('2d');
     const samples = new Float32Array(90);
@@ -606,7 +563,6 @@
     let lastTs = performance.now();
 
     function pqrstSample(p) {
-      // p in [0, 1): realistic P-wave, Q-dip, sharp R-spike, S-dip, T-wave
       if (p > 0.10 && p < 0.20) return 0.18 * Math.sin(((p - 0.10) / 0.10) * Math.PI);
       if (p >= 0.24 && p < 0.28) return -0.18 * Math.sin(((p - 0.24) / 0.04) * Math.PI);
       if (p >= 0.28 && p < 0.34) return 0.96 * Math.sin(((p - 0.28) / 0.06) * Math.PI);
@@ -616,11 +572,11 @@
     }
 
     function accentColor() {
-      if (currentBpm <= 0) return '#64748b';
+      if (currentBpm <= 0) return '#94a3b8';
       if (currentBpm < 100) return '#38bdf8';
       if (currentBpm < 130) return '#34d399';
       if (currentBpm < 160) return '#fbbf24';
-      return '#ff3b5c';
+      return '#ff4766';
     }
 
     function renderEcg(now) {
@@ -638,11 +594,9 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
-      // Shift buffer & push new sample at ~60Hz visual cadence
       samples.copyWithin(0, 1);
       if (currentBpm > 0) {
-        const beatsPerSec = currentBpm / 60;
-        phase = (phase + dt * beatsPerSec) % 1;
+        phase = (phase + dt * (currentBpm / 60)) % 1;
         samples[samples.length - 1] = pqrstSample(phase);
       } else {
         samples[samples.length - 1] = 0;
@@ -670,7 +624,6 @@
       ctx.lineCap = 'round';
       ctx.stroke();
 
-      // Leading pulse head dot
       const headX = w - 5;
       const headY = midY - samples[samples.length - 1] * amp;
       ctx.beginPath();

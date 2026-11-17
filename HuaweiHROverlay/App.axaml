@@ -1,0 +1,163 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="HuaweiHROverlay.App"
+             RequestedThemeVariant="Dark">
+
+    <Application.Resources>
+        <SolidColorBrush x:Key="BgDeepBrush" Color="#0A0C12"/>
+        <SolidColorBrush x:Key="BgSurfaceBrush" Color="#10131D"/>
+        <SolidColorBrush x:Key="BgCardBrush" Color="#141824"/>
+        <SolidColorBrush x:Key="BgCardElevatedBrush" Color="#1B2030"/>
+        <SolidColorBrush x:Key="BgInputBrush" Color="#0C0F18"/>
+        <SolidColorBrush x:Key="AccentRedBrush" Color="#FF3B5C"/>
+        <SolidColorBrush x:Key="AccentRedBrightBrush" Color="#FF7A91"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#F4F6FB"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#B6C0D6"/>
+        <SolidColorBrush x:Key="TextMutedBrush" Color="#8893AD"/>
+        <SolidColorBrush x:Key="BorderSubtleBrush" Color="#242A3E"/>
+        <SolidColorBrush x:Key="BorderStrongBrush" Color="#343D59"/>
+        <SolidColorBrush x:Key="GreenOkBrush" Color="#22C55E"/>
+        <SolidColorBrush x:Key="BlueInfoBrush" Color="#38BDF8"/>
+        <SolidColorBrush x:Key="YellowWarnBrush" Color="#F59E0B"/>
+    </Application.Resources>
+
+    <Application.Styles>
+        <FluentTheme />
+
+        <!-- Surface Containers -->
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{StaticResource BgCardBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="16"/>
+        </Style>
+
+        <Style Selector="Border.accentCard">
+            <Setter Property="Background" Value="#181525"/>
+            <Setter Property="BorderBrush" Value="#66FF3B5C"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="16"/>
+        </Style>
+
+        <!-- Primary Action Button -->
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="#E62E50"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Padding" Value="15,8"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#FF3B5C"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+        </Style>
+        <Style Selector="Button.primary:disabled /template/ ContentPresenter">
+            <Setter Property="Opacity" Value="0.4"/>
+        </Style>
+
+        <!-- Secondary Button -->
+        <Style Selector="Button.secondary">
+            <Setter Property="Background" Value="{StaticResource BgCardElevatedBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderStrongBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="12,7"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.secondary:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#252C42"/>
+            <Setter Property="BorderBrush" Value="#4B567D"/>
+        </Style>
+
+        <!-- Ghost / Destructive Outline Button -->
+        <Style Selector="Button.ghost">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentRedBrightBrush}"/>
+            <Setter Property="BorderBrush" Value="#55FF3B5C"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="12,7"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#24FF3B5C"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+        </Style>
+
+        <!-- Subtle Toolbar Button -->
+        <Style Selector="Button.subtle">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.subtle:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#1D2336"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+        </Style>
+
+        <!-- ToggleButton Pill Chips -->
+        <Style Selector="ToggleButton.chip">
+            <Setter Property="Background" Value="{StaticResource BgInputBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="7"/>
+            <Setter Property="Padding" Value="11,5"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="ToggleButton.chip:checked /template/ ContentPresenter">
+            <Setter Property="Background" Value="#2438BDF8"/>
+            <Setter Property="BorderBrush" Value="#7738BDF8"/>
+            <Setter Property="Foreground" Value="#F0F9FF"/>
+        </Style>
+
+        <Style Selector="RadioButton.themeChip">
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,12,4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+
+        <!-- Read-only Copyable URL Box -->
+        <Style Selector="TextBox.urlBox">
+            <Setter Property="Background" Value="{StaticResource BgInputBrush}"/>
+            <Setter Property="Foreground" Value="#BAE6FD"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderStrongBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="FontFamily" Value="Cascadia Mono, JetBrains Mono, Menlo, Consolas, monospace"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="IsReadOnly" Value="True"/>
+        </Style>
+
+        <!-- Device ListBox -->
+        <Style Selector="ListBox.deviceList">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="ListBox.deviceList > ListBoxItem">
+            <Setter Property="Padding" Value="12,9"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+    </Application.Styles>
+</Application>

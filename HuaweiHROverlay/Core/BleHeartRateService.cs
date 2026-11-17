@@ -1,294 +1,110 @@
-using Windows.Devices.Bluetooth;
-using Windows.Devices.Bluetooth.Advertisement;
-using Windows.Devices.Bluetooth.GenericAttributeProfile;
+using HuaweiHROverlay.Core.Platforms;
 
 namespace HuaweiHROverlay.Core;
 
-/// <summary>
-/// One live BLE heart rate connection. Multiple sessions run in parallel,
-/// one per connected watch/band.
-/// </summary>
-public class BleDeviceSession : IAsyncDisposable
-{
-    internal static readonly Guid HeartRateServiceUuid     = new("0000180d-0000-1000-8000-00805f9b34fb");
-    private  static readonly Guid HeartRateMeasurementUuid = new("00002a37-0000-1000-8000-00805f9b34fb");
-
-    private readonly SynchronizationContext _syncContext;
-    private BluetoothLEDevice? _device;
-    private GattDeviceService? _service;
-    private GattCharacteristic? _characteristic;
-    private bool _disposed;
-
-    public string DeviceId { get; }
-    public string DeviceName { get; }
-    public bool IsConnected { get; private set; }
-
-    public event EventHandler<HeartRateReading>? HeartRateChanged;
-    public event EventHandler? ConnectionLost;
-    public event EventHandler<string>? StatusChanged;
-
-    public BleDeviceSession(string deviceId, string deviceName, SynchronizationContext? syncContext = null)
-    {
-        DeviceId = deviceId.ToUpperInvariant();
-        DeviceName = deviceName;
-        _syncContext = syncContext ?? SynchronizationContext.Current ?? new SynchronizationContext();
-    }
-
-    public async Task<bool> ConnectAsync()
-    {
-        // DeviceId is the Bluetooth address as a 12-char hex string (e.g. "A4C138F12345")
-        if (!ulong.TryParse(DeviceId, System.Globalization.NumberStyles.HexNumber, null, out ulong address))
-        {
-            RaiseStatus("Invalid device address.");
-            return false;
-        }
-
-        try
-        {
-            _device = await BluetoothLEDevice.FromBluetoothAddressAsync(address);
-            if (_device == null)
-            {
-                RaiseStatus($"Could not open {DeviceName}. Try pairing it in Windows Bluetooth settings.");
-                return false;
-            }
-
-            _device.ConnectionStatusChanged += OnConnectionStatusChanged;
-
-            var servicesResult = await _device.GetGattServicesForUuidAsync(
-                HeartRateServiceUuid, BluetoothCacheMode.Uncached);
-            if (servicesResult.Status != GattCommunicationStatus.Success || servicesResult.Services.Count == 0)
-            {
-                RaiseStatus($"Heart Rate Service (0x180D) not found on {DeviceName}. Enable HR Data Broadcast on watch.");
-                await CleanupAsync();
-                return false;
-            }
-            _service = servicesResult.Services[0];
-
-            var charsResult = await _service.GetCharacteristicsForUuidAsync(
-                HeartRateMeasurementUuid, BluetoothCacheMode.Uncached);
-            if (charsResult.Status != GattCommunicationStatus.Success || charsResult.Characteristics.Count == 0)
-            {
-                RaiseStatus($"Heart Rate Measurement (0x2A37) not found on {DeviceName}.");
-                await CleanupAsync();
-                return false;
-            }
-            _characteristic = charsResult.Characteristics[0];
-
-            var cccdResult = await _characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
-                GattClientCharacteristicConfigurationDescriptorValue.Notify);
-            if (cccdResult != GattCommunicationStatus.Success)
-            {
-                RaiseStatus($"Failed to enable notifications on {DeviceName}. Re-enable HR Data Broadcast and retry.");
-                await CleanupAsync();
-                return false;
-            }
-
-            _characteristic.ValueChanged += OnHrValueChanged;
-            IsConnected = true;
-            RaiseStatus($"✓ Connected to {DeviceName} — streaming heart rate data.");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            RaiseStatus($"Connection error ({DeviceName}): {ex.Message}");
-            await CleanupAsync();
-            return false;
-        }
-    }
-
-    private void OnConnectionStatusChanged(BluetoothLEDevice sender, object args)
-    {
-        if (_disposed || sender.ConnectionStatus != BluetoothConnectionStatus.Disconnected) return;
-        _syncContext.Post(async _ =>
-        {
-            if (_disposed) return;
-            await CleanupAsync();
-            ConnectionLost?.Invoke(this, EventArgs.Empty);
-        }, null);
-    }
-
-    private void OnHrValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
-    {
-        // Heart Rate Measurement per BT spec §3.1: byte 0 = flags, bit 0 = UINT16 bpm
-        if (args.CharacteristicValue.Length < 2) return;
-
-        var reader = Windows.Storage.Streams.DataReader.FromBuffer(args.CharacteristicValue);
-        reader.ByteOrder = Windows.Storage.Streams.ByteOrder.LittleEndian;
-
-        byte flags = reader.ReadByte();
-        if ((flags & 0x01) != 0 && args.CharacteristicValue.Length < 3) return;
-        int bpm = (flags & 0x01) == 0 ? reader.ReadByte() : reader.ReadUInt16();
-        if (bpm is <= 0 or > 300) return;
-
-        var reading = new HeartRateReading
-        {
-            Bpm = bpm,
-            Connected = true,
-            Timestamp = DateTime.UtcNow,
-            DeviceId = DeviceId,
-            DeviceName = DeviceName
-        };
-        _syncContext.Post(_ => HeartRateChanged?.Invoke(this, reading), null);
-    }
-
-    private async Task CleanupAsync()
-    {
-        IsConnected = false;
-        if (_characteristic != null)
-        {
-            var ch = _characteristic;
-            _characteristic = null;
-            try
-            {
-                ch.ValueChanged -= OnHrValueChanged;
-                await ch.WriteClientCharacteristicConfigurationDescriptorAsync(
-                    GattClientCharacteristicConfigurationDescriptorValue.None);
-            }
-            catch { /* best effort */ }
-        }
-
-        _service?.Dispose();
-        _service = null;
-
-        if (_device != null)
-        {
-            var dev = _device;
-            _device = null;
-            dev.ConnectionStatusChanged -= OnConnectionStatusChanged;
-            dev.Dispose();
-        }
-    }
-
-    private void RaiseStatus(string message) =>
-        _syncContext.Post(_ => StatusChanged?.Invoke(this, message), null);
-
-    public async ValueTask DisposeAsync()
-    {
-        _disposed = true;
-        await CleanupAsync();
-    }
-}
-
+public sealed record BleDeviceSessionInfo(string DeviceId, string DeviceName);
 public sealed record SessionReconnectStateEventArgs(string DeviceId, string DeviceName, bool IsReconnecting);
 
 /// <summary>
-/// Scans for Bluetooth LE devices (paired and unpaired/broadcasting) and manages
-/// multiple concurrent heart rate connections — one <see cref="BleDeviceSession"/> per watch,
-/// with optional automatic reconnection when a watch briefly goes out of range.
+/// Cross-platform Bluetooth LE Heart Rate coordinator.
+/// Automatically selects Windows WinRT, Linux BlueZ (D-Bus), or macOS CoreBluetooth at runtime,
+/// manages multiple concurrent watch sessions, and handles automatic signal-drop reconnection.
 /// </summary>
-public class BleHeartRateService : IAsyncDisposable
+public sealed class BleHeartRateService : IAsyncDisposable
 {
-    private BluetoothLEAdvertisementWatcher? _adWatcher;
-    private readonly Dictionary<string, BleDeviceSession> _sessions = new();
-    private readonly Dictionary<string, (string Name, CancellationTokenSource Cts)> _reconnecting = new();
-    private readonly Dictionary<ulong, (string Name, bool HasHr)> _adCache = new();
+    private readonly IBlePlatformBackend _backend;
+    private readonly Dictionary<string, IBleGattSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (string Name, CancellationTokenSource Cts)> _reconnecting = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (string Name, bool HasHr, string? DisplayAddr)> _adCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _adLock = new();
-    private readonly SynchronizationContext _syncContext;
 
     public event EventHandler<HeartRateReading>? HeartRateChanged;
     public event EventHandler<BleDeviceInfo>? DeviceDiscovered;
     public event EventHandler<string>? StatusChanged;
-    public event EventHandler<BleDeviceSession>? SessionAdded;
-    public event EventHandler<(string DeviceId, string DeviceName)>? SessionRemoved;
+    public event EventHandler<BleDeviceSessionInfo>? SessionAdded;
+    public event EventHandler<BleDeviceSessionInfo>? SessionRemoved;
     public event EventHandler<SessionReconnectStateEventArgs>? SessionReconnectStateChanged;
     public event EventHandler? ScanningStoppedUnexpectedly;
 
-    public bool IsScanning { get; private set; }
+    public string PlatformBackendName => _backend.PlatformName;
+    public bool IsScanning => _backend.IsScanning;
     public bool AutoReconnect { get; set; } = true;
     public int SessionCount => _sessions.Count + _reconnecting.Count;
-    public IReadOnlyCollection<BleDeviceSession> Sessions => _sessions.Values;
 
-    public bool IsConnectedOrReconnecting(string deviceId)
+    public bool IsConnectedOrReconnecting(string deviceId) =>
+        _sessions.ContainsKey(deviceId) || _reconnecting.ContainsKey(deviceId);
+
+    public BleHeartRateService(IBlePlatformBackend? customBackend = null)
     {
-        string key = deviceId.ToUpperInvariant();
-        return _sessions.ContainsKey(key) || _reconnecting.ContainsKey(key);
+        _backend = customBackend ?? CreateDefaultBackend();
+        _backend.AdvertisementReceived += OnBackendAdvertisement;
+        _backend.StatusMessage += (_, msg) => StatusChanged?.Invoke(this, msg);
+        _backend.ScanStoppedUnexpectedly += (_, _) => ScanningStoppedUnexpectedly?.Invoke(this, EventArgs.Empty);
     }
 
-    public BleHeartRateService()
+    private static IBlePlatformBackend CreateDefaultBackend()
     {
-        _syncContext = SynchronizationContext.Current ?? new SynchronizationContext();
+#if WINDOWS_BLE
+        return new WindowsBleBackend();
+#else
+        if (OperatingSystem.IsLinux())
+            return new LinuxBlueZBackend();
+        if (OperatingSystem.IsMacOS())
+            return new MacCoreBluetoothBackend();
+        return new UnsupportedBleBackend();
+#endif
     }
 
-    // ──────────────────────────────────────────────
-    // Scanning
-    // ──────────────────────────────────────────────
-
-    public void StartScanning()
+    public async Task StartScanningAsync()
     {
         if (IsScanning) return;
-
         lock (_adLock) _adCache.Clear();
-
-        _adWatcher = new BluetoothLEAdvertisementWatcher
-        {
-            ScanningMode = BluetoothLEScanningMode.Active
-        };
-
-        _adWatcher.Received += OnAdvertisementReceived;
-        _adWatcher.Stopped  += OnWatcherStopped;
-        _adWatcher.Start();
-
-        IsScanning = true;
-        RaiseStatus("Scanning for Bluetooth LE devices… (ensure HR Data Broadcast is ON)");
+        StatusChanged?.Invoke(this, $"Scanning via {_backend.PlatformName}… (ensure HR Data Broadcast is ON)");
+        await _backend.StartScanningAsync();
     }
 
-    public void StopScanning()
+    public async Task StopScanningAsync()
     {
-        if (_adWatcher == null || !IsScanning) return;
-        _adWatcher.Stop();
-        _adWatcher.Received -= OnAdvertisementReceived;
-        _adWatcher.Stopped  -= OnWatcherStopped;
-        _adWatcher = null;
-        IsScanning = false;
-        RaiseStatus("Scan stopped.");
+        if (!IsScanning) return;
+        await _backend.StopScanningAsync();
+        StatusChanged?.Invoke(this, "Scan stopped.");
     }
-
-    // ──────────────────────────────────────────────
-    // Connections & Auto-Reconnect
-    // ──────────────────────────────────────────────
 
     public async Task<bool> ConnectAsync(string deviceId, string deviceName)
     {
-        deviceId = deviceId.ToUpperInvariant();
-        if (_sessions.ContainsKey(deviceId))
+        string key = deviceId.Trim().ToUpperInvariant();
+        if (_sessions.ContainsKey(key))
         {
-            RaiseStatus($"Already connected to {deviceName}.");
+            StatusChanged?.Invoke(this, $"Already connected to {deviceName}.");
             return true;
         }
 
-        // Cancel any pending reconnect loop if user explicitly connects
-        CancelReconnectLoop(deviceId);
+        CancelReconnectLoop(key);
+        StatusChanged?.Invoke(this, $"Connecting to {deviceName}…");
 
-        RaiseStatus($"Connecting to {deviceName}…");
-        var session = CreateWiredSession(deviceId, deviceName);
+        var session = await _backend.ConnectAsync(key, deviceName);
+        if (session == null) return false;
 
-        bool ok = await session.ConnectAsync();
-        if (ok)
-        {
-            _sessions[deviceId] = session;
-            RaiseStatus($"✓ {deviceName} connected ({_sessions.Count} live).");
-            _syncContext.Post(_ => SessionAdded?.Invoke(this, session), null);
-        }
-        else
-        {
-            await session.DisposeAsync();
-        }
-        return ok;
+        WireSessionEvents(session);
+        _sessions[key] = session;
+        StatusChanged?.Invoke(this, $"Connected to {deviceName} ({_sessions.Count} live).");
+        SessionAdded?.Invoke(this, new BleDeviceSessionInfo(key, deviceName));
+        return true;
     }
 
     public async Task DisconnectAsync(string deviceId)
     {
-        deviceId = deviceId.ToUpperInvariant();
-
+        string key = deviceId.Trim().ToUpperInvariant();
         string? removedName = null;
-        if (_reconnecting.Remove(deviceId, out var pending))
+
+        if (_reconnecting.Remove(key, out var pending))
         {
             pending.Cts.Cancel();
             pending.Cts.Dispose();
             removedName = pending.Name;
         }
 
-        if (_sessions.Remove(deviceId, out var session))
+        if (_sessions.Remove(key, out var session))
         {
             removedName = session.DeviceName;
             await session.DisposeAsync();
@@ -296,21 +112,29 @@ public class BleHeartRateService : IAsyncDisposable
 
         if (removedName != null)
         {
-            RaiseStatus($"{removedName} disconnected.");
-            _syncContext.Post(_ => SessionRemoved?.Invoke(this, (deviceId, removedName)), null);
+            StatusChanged?.Invoke(this, $"{removedName} disconnected.");
+            SessionRemoved?.Invoke(this, new BleDeviceSessionInfo(key, removedName));
         }
     }
 
-    private BleDeviceSession CreateWiredSession(string deviceId, string deviceName)
+    private void WireSessionEvents(IBleGattSession session)
     {
-        var session = new BleDeviceSession(deviceId, deviceName, _syncContext);
-        session.StatusChanged += (_, msg) => RaiseStatus(msg);
-        session.HeartRateChanged += (_, reading) => HeartRateChanged?.Invoke(this, reading);
-        session.ConnectionLost += (_, _) => OnUnexpectedDisconnect(session);
-        return session;
+        session.BpmReceived += (_, bpm) =>
+        {
+            HeartRateChanged?.Invoke(this, new HeartRateReading
+            {
+                Bpm = bpm,
+                Connected = true,
+                Timestamp = DateTime.UtcNow,
+                DeviceId = session.DeviceId,
+                DeviceName = session.DeviceName
+            });
+        };
+
+        session.DisconnectedUnexpectedly += (_, _) => OnUnexpectedDisconnect(session);
     }
 
-    private async void OnUnexpectedDisconnect(BleDeviceSession lostSession)
+    private async void OnUnexpectedDisconnect(IBleGattSession lostSession)
     {
         string id = lostSession.DeviceId;
         string name = lostSession.DeviceName;
@@ -320,17 +144,15 @@ public class BleHeartRateService : IAsyncDisposable
 
         if (!AutoReconnect)
         {
-            RaiseStatus($"{name} disconnected unexpectedly.");
-            _syncContext.Post(_ => SessionRemoved?.Invoke(this, (id, name)), null);
+            StatusChanged?.Invoke(this, $"{name} disconnected unexpectedly.");
+            SessionRemoved?.Invoke(this, new BleDeviceSessionInfo(id, name));
             return;
         }
 
-        RaiseStatus($"{name} signal lost — auto-reconnecting…");
+        StatusChanged?.Invoke(this, $"{name} signal lost — auto-reconnecting…");
         var cts = new CancellationTokenSource();
         _reconnecting[id] = (name, cts);
-        _syncContext.Post(_ => SessionReconnectStateChanged?.Invoke(
-            this, new SessionReconnectStateEventArgs(id, name, IsReconnecting: true)), null);
-
+        SessionReconnectStateChanged?.Invoke(this, new SessionReconnectStateEventArgs(id, name, IsReconnecting: true));
         _ = ReconnectLoopAsync(id, name, cts.Token);
     }
 
@@ -338,100 +160,73 @@ public class BleHeartRateService : IAsyncDisposable
     {
         while (!ct.IsCancellationRequested)
         {
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(4), ct);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
+            try { await Task.Delay(TimeSpan.FromSeconds(4), ct); }
+            catch (OperationCanceledException) { return; }
 
             if (ct.IsCancellationRequested || !_reconnecting.ContainsKey(deviceId))
                 return;
 
-            var candidate = CreateWiredSession(deviceId, deviceName);
-            bool ok = await candidate.ConnectAsync();
+            var candidate = await _backend.ConnectAsync(deviceId, deviceName, ct);
+            if (candidate == null) continue;
+
             if (ct.IsCancellationRequested || !_reconnecting.ContainsKey(deviceId))
             {
                 await candidate.DisposeAsync();
                 return;
             }
 
-            if (ok)
-            {
-                CancelReconnectLoop(deviceId);
-                _sessions[deviceId] = candidate;
-                RaiseStatus($"✓ Reconnected to {deviceName}.");
-                _syncContext.Post(_ => SessionReconnectStateChanged?.Invoke(
-                    this, new SessionReconnectStateEventArgs(deviceId, deviceName, IsReconnecting: false)), null);
-                return;
-            }
-
-            await candidate.DisposeAsync();
+            CancelReconnectLoop(deviceId);
+            WireSessionEvents(candidate);
+            _sessions[deviceId] = candidate;
+            StatusChanged?.Invoke(this, $"Reconnected to {deviceName}.");
+            SessionReconnectStateChanged?.Invoke(this, new SessionReconnectStateEventArgs(deviceId, deviceName, IsReconnecting: false));
+            return;
         }
     }
 
-    private void CancelReconnectLoop(string deviceId)
+    private void CancelReconnectLoop(string key)
     {
-        if (_reconnecting.Remove(deviceId, out var pending))
+        if (_reconnecting.Remove(key, out var pending))
         {
             pending.Cts.Cancel();
             pending.Cts.Dispose();
         }
     }
 
-    // ──────────────────────────────────────────────
-    // Private — Advertisement scanning
-    // ──────────────────────────────────────────────
-
-    private void OnAdvertisementReceived(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
+    private void OnBackendAdvertisement(object? sender, BleAdvertisementPacket pkt)
     {
-        ulong address = args.BluetoothAddress;
-        string? adName = args.Advertisement.LocalName?.Trim();
-        bool packetHasHr = args.Advertisement.ServiceUuids.Contains(BleDeviceSession.HeartRateServiceUuid);
+        string id = pkt.DeviceId.Trim().ToUpperInvariant();
+        if (string.IsNullOrEmpty(id)) return;
 
+        string? adName = pkt.LocalName?.Trim();
         string resolvedName;
         bool resolvedHr;
+        string? resolvedAddr;
 
         lock (_adLock)
         {
-            bool existed = _adCache.TryGetValue(address, out var prev);
-            resolvedHr = packetHasHr || (existed && prev.HasHr);
+            bool existed = _adCache.TryGetValue(id, out var prev);
+            resolvedHr = pkt.HasHrServiceUuid || (existed && prev.HasHr);
+            resolvedAddr = pkt.DisplayAddress ?? (existed ? prev.DisplayAddr : null);
 
             if (!string.IsNullOrEmpty(adName))
                 resolvedName = adName;
             else if (existed && !string.IsNullOrEmpty(prev.Name))
                 resolvedName = prev.Name;
             else if (resolvedHr)
-                resolvedName = $"BLE HR Sensor ({address:X12})";
+                resolvedName = $"BLE HR Sensor ({(id.Length > 8 ? id[..8] : id)})";
             else
-                return; // Skip unnamed non-HR noise
+                return; // Filter unnamed non-HR background beacons
 
-            _adCache[address] = (resolvedName, resolvedHr);
+            _adCache[id] = (resolvedName, resolvedHr, resolvedAddr);
         }
 
-        int rssi = args.RawSignalStrengthInDBm;
-        var info = new BleDeviceInfo(address.ToString("X12"), resolvedName, rssi, resolvedHr);
-        _syncContext.Post(_ => DeviceDiscovered?.Invoke(this, info), null);
+        DeviceDiscovered?.Invoke(this, new BleDeviceInfo(id, resolvedName, pkt.Rssi, resolvedHr, resolvedAddr));
     }
-
-    private void OnWatcherStopped(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementWatcherStoppedEventArgs args)
-    {
-        if (IsScanning)
-        {
-            IsScanning = false;
-            RaiseStatus($"BLE scanner stopped ({args.Error}). Click Scan to retry.");
-            _syncContext.Post(_ => ScanningStoppedUnexpectedly?.Invoke(this, EventArgs.Empty), null);
-        }
-    }
-
-    private void RaiseStatus(string message) =>
-        _syncContext.Post(_ => StatusChanged?.Invoke(this, message), null);
 
     public async ValueTask DisposeAsync()
     {
-        StopScanning();
+        await StopScanningAsync();
         foreach (var (_, cts) in _reconnecting.Values)
         {
             cts.Cancel();
@@ -439,26 +234,47 @@ public class BleHeartRateService : IAsyncDisposable
         }
         _reconnecting.Clear();
 
-        foreach (var session in _sessions.Values)
-        {
-            await session.DisposeAsync();
-        }
+        foreach (var s in _sessions.Values)
+            await s.DisposeAsync();
         _sessions.Clear();
+
+        await _backend.DisposeAsync();
+    }
+
+    private sealed class UnsupportedBleBackend : IBlePlatformBackend
+    {
+        public string PlatformName => "Unsupported OS";
+        public bool IsScanning => false;
+        public event EventHandler<BleAdvertisementPacket>? AdvertisementReceived { add { } remove { } }
+        public event EventHandler<string>? StatusMessage;
+        public event EventHandler? ScanStoppedUnexpectedly { add { } remove { } }
+
+        public Task StartScanningAsync()
+        {
+            StatusMessage?.Invoke(this, "Bluetooth LE is supported on Windows 10/11, Linux (BlueZ), and macOS.");
+            return Task.CompletedTask;
+        }
+        public Task StopScanningAsync() => Task.CompletedTask;
+        public Task<IBleGattSession?> ConnectAsync(string deviceId, string deviceName, CancellationToken ct = default) =>
+            Task.FromResult<IBleGattSession?>(null);
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }
 
-/// <summary>
-/// Discovered BLE device metadata with signal quality and HR service indicators.
-/// </summary>
-public record BleDeviceInfo(string Id, string Name, int Rssi, bool HasHrService = false)
+public record BleDeviceInfo(
+    string Id,
+    string Name,
+    int Rssi,
+    bool HasHrService = false,
+    string? CustomDisplayAddress = null)
 {
-    public string DisplayName => string.IsNullOrWhiteSpace(Name)
-        ? $"Unknown ({Id})"
-        : Name;
+    public string DisplayName => string.IsNullOrWhiteSpace(Name) ? $"Unknown ({Id})" : Name;
 
-    public string FormattedAddress => Id.Length == 12
-        ? $"{Id[0..2]}:{Id[2..4]}:{Id[4..6]}:{Id[6..8]}:{Id[8..10]}:{Id[10..12]}"
-        : Id;
+    public string FormattedAddress => !string.IsNullOrWhiteSpace(CustomDisplayAddress)
+        ? CustomDisplayAddress
+        : (Id.Length == 12
+            ? $"{Id[0..2]}:{Id[2..4]}:{Id[4..6]}:{Id[6..8]}:{Id[8..10]}:{Id[10..12]}"
+            : Id);
 
     public string RssiDisplay => Rssi != 0 ? $"{Rssi} dBm" : "—";
 
@@ -471,14 +287,6 @@ public record BleDeviceInfo(string Id, string Name, int Rssi, bool HasHrService 
         _ => 1
     };
 
-    public string SignalBarsGlyph => SignalBars switch
-    {
-        4 => "▂▄▆█",
-        3 => "▂▄▆░",
-        2 => "▂▄░░",
-        _ => "▂░░░"
-    };
-
     public bool IsLikelyHrWatch => HasHrService
         || Name.Contains("Huawei", StringComparison.OrdinalIgnoreCase)
         || Name.Contains("Watch", StringComparison.OrdinalIgnoreCase)
@@ -486,7 +294,8 @@ public record BleDeviceInfo(string Id, string Name, int Rssi, bool HasHrService 
         || Name.Contains("Polar", StringComparison.OrdinalIgnoreCase)
         || Name.Contains("TICKR", StringComparison.OrdinalIgnoreCase)
         || Name.Contains("Garmin", StringComparison.OrdinalIgnoreCase)
+        || Name.Contains("Coospo", StringComparison.OrdinalIgnoreCase)
         || Name.Contains("HR", StringComparison.OrdinalIgnoreCase);
 
-    public string BadgeText => HasHrService ? "♥ HR 0x180D" : (IsLikelyHrWatch ? "⌚ Wearable" : "BLE");
+    public string BadgeText => HasHrService ? "HR 0x180D" : (IsLikelyHrWatch ? "WEARABLE" : "BLE");
 }

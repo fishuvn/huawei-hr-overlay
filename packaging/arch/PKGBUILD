@@ -1,0 +1,24 @@
+# Maintainer: fishuvn <hn42963@st.huce.edu.vn>
+pkgname=huawei-hr-overlay-bin
+pkgver=2.0.0
+pkgrel=1
+pkgdesc="Real-time Bluetooth LE Heart Rate Overlay for OBS Studio (Huawei Watch/Band & GATT 0x180D)"
+arch=('x86_64')
+url="https://github.com/fishuvn/huawei-hr-overlay"
+license=('MIT')
+depends=('bluez' 'fontconfig' 'libx11')
+optdepends=('obs-studio: Browser Source overlay host')
+provides=('huawei-hr-overlay')
+conflicts=('huawei-hr-overlay')
+options=('!strip' '!debug')
+source=("HuaweiHROverlay-v${pkgver}-linux-x64.tar.gz::https://github.com/fishuvn/huawei-hr-overlay/releases/download/v${pkgver}/HuaweiHROverlay-v${pkgver}-linux-x64.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+  cd "${srcdir}/huawei-hr-overlay-${pkgver}-linux-x64"
+  install -Dm755 "HuaweiHROverlay" "${pkgdir}/usr/lib/huawei-hr-overlay/HuaweiHROverlay"
+  install -dm755 "${pkgdir}/usr/bin"
+  ln -s "../lib/huawei-hr-overlay/HuaweiHROverlay" "${pkgdir}/usr/bin/huawei-hr-overlay"
+  install -Dm644 "huawei-hr-overlay.desktop" "${pkgdir}/usr/share/applications/huawei-hr-overlay.desktop"
+  install -Dm644 "huawei-hr-overlay.svg" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/huawei-hr-overlay.svg"
+}

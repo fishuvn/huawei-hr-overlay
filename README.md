@@ -1,183 +1,138 @@
 # Huawei HR Overlay for OBS
 
-Real-time heart rate overlay for OBS Studio, reading data directly from your **Huawei Watch or Smartband** via Bluetooth LE — no Huawei SDK, no cloud, no phone required.
+Real-time Bluetooth LE heart rate overlay for **OBS Studio** across **Windows 10/11**, **Linux (Debian/Ubuntu, Arch Linux, Fedora)**, and **macOS (Apple Silicon & Intel)** — reading data directly from your **Huawei Watch, Huawei Band, or standard BLE HR monitor** with no Huawei SDK, no cloud, and no phone required.
 
-![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)
-![.NET](https://img.shields.io/badge/.NET%208-Runtime%20Included-purple)
+![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
+![.NET](https://img.shields.io/badge/.NET%208-Avalonia%20UI-purple)
 ![OBS](https://img.shields.io/badge/OBS-Browser%20Source-orange)
 
 ---
 
-## Downloads & In-App Updates
+## Downloads & Installation
 
-Grab the latest build from [**Releases**](https://github.com/fishuvn/huawei-hr-overlay/releases):
+Grab the latest build for your OS from [**Releases**](https://github.com/fishuvn/huawei-hr-overlay/releases):
 
-| File | Size | For |
-|------|------|-----|
-| `HuaweiHROverlay-x.y.z-win-x64.exe` | ~180 MB | **Most users** — .NET 8 Desktop Runtime included, just download and run |
-| `HuaweiHROverlay-x.y.z-win-x64-lite.exe` | ~25 MB | Machines that already have the [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/8.0/runtime) |
+### Windows 10 / 11
+| File | For |
+|------|-----|
+| `HuaweiHROverlay-vX.Y.Z-win-x64.exe` | **Most users** — self-contained single file, just download and run |
+| `HuaweiHROverlay-vX.Y.Z-win-x64-lite.exe` | Machines with [.NET 8 Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) preinstalled |
 
-> **Built-in GitHub Updater:** Starting in `v1.2.0`, the app automatically checks GitHub Releases on launch (or via **↻ Check Updates**), selects the matching **Full** or **Lite** build for your installation, verifies the **SHA-256** digest, and updates + restarts in one click.
+### Linux (Debian / Ubuntu / Arch / Fedora)
+Ensure BlueZ is active (`sudo systemctl enable --now bluetooth`):
 
----
+- **Debian 12/13 (Bookworm/Trixie), Ubuntu, Linux Mint, Pop!_OS:**
+  ```bash
+  sudo apt install ./HuaweiHROverlay-vX.Y.Z-linux-x64.deb
+  huawei-hr-overlay
+  ```
+- **Fedora, RHEL, Nobara, Bazzite, openSUSE:**
+  ```bash
+  sudo dnf install ./HuaweiHROverlay-vX.Y.Z-linux-x64.rpm
+  huawei-hr-overlay
+  ```
+- **Arch Linux, EndeavourOS, CachyOS, Manjaro:**
+  Download `PKGBUILD` from the latest release (or `packaging/arch/PKGBUILD` in this repo) and run:
+  ```bash
+  makepkg -si
+  huawei-hr-overlay
+  ```
+  *Or use the portable archive on any distro:*
+  ```bash
+  tar -xzf HuaweiHROverlay-vX.Y.Z-linux-x64.tar.gz
+  cd huawei-hr-overlay-*-linux-x64 && ./install.sh
+  ```
 
-## How It Works
+### macOS (Apple Silicon & Intel)
+1. Download `HuaweiHROverlay-vX.Y.Z-macos-arm64.dmg` (M1/M2/M3/M4) or `HuaweiHROverlay-vX.Y.Z-macos-x64.dmg` (Intel).
+2. Open the DMG and drag **Huawei HR Overlay.app** to **Applications**.
+3. If macOS Gatekeeper warns about an unsigned open-source app on first launch:
+   ```bash
+   xattr -cr "/Applications/Huawei HR Overlay.app"
+   ```
+4. Grant **Bluetooth** access when macOS prompts on first scan.
 
-```
-Huawei Watch/Band
-  [HR Data Broadcast ON]
-        │ Bluetooth LE (GATT 0x180D)
-        ▼
-  HuaweiHROverlay.exe (this app)
-  ├── BLE Scanner + GATT reader + Auto-reconnect
-  ├── GitHub Releases Updater (Full/Lite aware)
-  ├── WebSocket server  ws://localhost:8765
-  └── HTTP server       http://localhost:8764
-        │
-        ▼
-  OBS Browser Source → customizable animated overlay + live ECG wave
-```
-
-Your Huawei watch's **HR Data Broadcast** mode makes it act as a standard BLE Heart Rate Monitor.
-No Huawei SDK or cloud account is needed.
-
----
-
-## Requirements
-
-| Requirement | Download |
-|-------------|---------|
-| Windows 10 (build 19041+) or Windows 11 | — |
-| **Bluetooth 5.0 or newer adapter** | Most modern PCs have it built in; older PCs need a BT 5.0+ USB dongle |
-| OBS Studio | [obsproject.com](https://obsproject.com) |
-| Huawei Watch/Band with HR Data Broadcast | Most GT2/GT3/GT4/GT5/GT6, Band 6+, Watch Fit series |
-
-> [!NOTE]
-> Bluetooth 4.x adapters may discover devices but often fail to hold a reliable BLE connection to
-> modern watches. If scans come up empty or connections drop, a BT 5.0+ USB dongle is the usual fix.
+> **Built-in GitHub Updater:** The app checks `fishuvn/huawei-hr-overlay` releases automatically on launch (or via **Check Updates**), selects the matching package/binary for your OS & architecture, and verifies SHA-256 checksums.
 
 ---
 
-## Quick Setup
+## Quick Start
 
-### Step 1 — Enable HR Data Broadcast on your Huawei watch
-1. On your **Huawei watch/band**, press the side button to open the app list
-2. Go to **Settings → HR Data Broadcasts** and enable it
-3. Keep the watch screen awake while connecting
-
-### Step 2 — Pair with Windows (optional, improves reconnect reliability)
-1. Open **Windows Settings → Bluetooth & devices → Add device → Bluetooth**
-2. Select your Huawei watch to pair
-
-### Step 3 — Connect in Huawei HR Overlay
-1. Launch **`HuaweiHROverlay.exe`**
-2. Click **▶ Scan** (toggle **HR Only** to filter out non-wearable Bluetooth devices)
-3. Double-click your watch — or select it and click **⚡ Connect Watch**
-4. Live BPM, HR Zone, **Min / Avg / Peak**, and a real-time trend sparkline appear in the Hero card
-5. Connect additional watches the same way — click **Copy URL** on any connected row for a per-watch OBS source
-
-### Step 4 — Customize & Add OBS Browser Source
-1. In the **OBS Browser Source Studio** card, choose a **Theme Preset** (`Glass Card`, `Minimal Clean`, `Neon Cyber`, `Compact Pill`) and toggle **Overlay Elements** (`ECG Waveform`, `HR Zone`, `Min / Max`, `Watch Name`, `Auto-hide Offline`)
-2. Click **Copy URL**
-3. In OBS: **Sources → + → Browser**
-   - **URL:** paste the copied URL (default `http://localhost:8764/`)
+1. **Enable HR Data Broadcast on your watch:**
+   On your Huawei Watch/Band open **Settings → HR Data Broadcasts → ON** and keep the screen awake while connecting.
+2. **Scan & Connect:**
+   Launch **Huawei HR Overlay**, click **Scan** (toggle **HR Only** to filter out non-wearable BLE beacons), and double-click your watch (or click **Connect Watch**). Repeat to connect multiple watches simultaneously.
+3. **Add to OBS Studio:**
+   Customize your theme in **OBS Browser Source Studio**, click **Copy URL**, then in OBS add **Sources → + → Browser**:
+   - **URL:** `http://localhost:8764/` (or per-device `/overlay/<ID>`)
    - **Width:** `400` · **Height:** `120`
    - **Shutdown source when not visible:** **OFF**
+
+### Headless CLI Mode (Optional)
+For Linux tiling window managers, scripts, or headless setups:
+```bash
+huawei-hr-overlay --headless --scan
+huawei-hr-overlay --headless --device A4:C1:38:F1:23:45
+huawei-hr-overlay --headless --simulate
+```
 
 ---
 
 ## OBS Overlay URL Parameters
 
-All parameters are optional and generated automatically by the in-app **OBS Browser Source Studio**:
-
 | Parameter | Values | Default | Description |
 |-----------|--------|---------|-------------|
-| `/overlay/<ID>` or `device=<ID>` | 12-hex BLE ID or `SIM` | *(any active)* | Lock overlay to a specific watch |
+| `/overlay/<ID>` or `device=<ID>` | BLE ID / UUID or `SIM` | *(any active)* | Lock overlay to one specific watch |
 | `theme` | `glass`, `minimal`, `neon`, `pill` | `glass` | Visual style preset |
 | `ecg` | `1`, `0` | `1` | Real-time P-QRS-T cardiac waveform trace |
-| `zone` | `1`, `0` | `1` | Adaptive HR zone status pill (`Rest`, `Fat Burn`, `Cardio`, `Peak`) |
+| `zone` | `1`, `0` | `1` | Adaptive HR zone status (`Rest`, `Fat Burn`, `Cardio`, `Peak`) |
 | `stats` | `1`, `0` | `0` | Show session `MIN` / `MAX` alongside BPM |
 | `name` | `1`, `0` | `0` | Display watch name above BPM |
 | `label` | Custom text | — | Custom player label (e.g. `?label=Player+1`) |
 | `align` | `left`, `center`, `right` | `center` | Horizontal alignment inside OBS Browser Source |
-| `autohide` | `1`, `0` | `0` | Smoothly hide overlay when watch is offline/disconnected |
+| `autohide` | `1`, `0` | `0` | Smoothly hide overlay when watch is offline |
 
 ---
 
 ## Supported Devices
 
-Any device implementing the standard **BLE GATT Heart Rate Service (0x180D)** works:
-
-- Huawei Watch GT2 / GT2e / GT2 Pro / GT3 / GT3 Pro / GT3 SE / GT4 / GT5 / GT5 Pro / GT6 / GT6 Pro
-- Huawei Watch Ultimate / Ultimate Design / Ultimate 2
-- Huawei Watch Fit / Fit Elegant / Fit 2 / Fit 3 / Fit 4 / Fit 4 Pro / Fit 5
-- Huawei Band 6 / 7 / 7 Pro / 8 / 9 / 10 / 10 Pro / 11 / 11 Pro
-- Standard BLE HR chest straps & armbands (Polar H10, Wahoo TICKR, Garmin HRM, Coospo, etc.)
-
----
-
-## Ports & Endpoints
-
-| Service | Address |
-|---------|---------|
-| Overlay page, any active device | `http://localhost:8764/` |
-| Overlay page, specific device | `http://localhost:8764/overlay/<DEVICE-ID>` |
-| WebSocket BPM stream | `ws://localhost:8765/` or `ws://localhost:8765/?device=<DEVICE-ID>` |
-| Telemetry status JSON | `http://localhost:8764/status` or `http://localhost:8764/status?device=<DEVICE-ID>` |
-
----
-
-## Changelog
-
-**v1.2.0**
-- **GitHub In-App Updater** — checks `fishuvn/huawei-hr-overlay` releases automatically on startup and on demand, detects Full vs Lite installation, verifies SHA-256 checksums, downloads with live progress, and restarts cleanly
-- **Telemetry Studio UI/UX Upgrade** — resizable modern dark interface, live 45-sample BPM sparkline, session Min/Avg/Peak counters, custom pill switches, HR-only scanner filter, 4-bar signal meter, empty/loading states, and 1-click per-device URL copy
-- **Upgraded OBS Overlay + Studio Builder** — crisp vector heart, real-time P-QRS-T ECG canvas waveform, 4 theme presets (`glass`, `minimal`, `neon`, `pill`), optional Min/Max & player/watch labels, auto-hide mode, and instant `/status` hydration
-- **BLE Auto-Reconnect** — automatically reconnects if your watch briefly drops signal mid-stream
-- Fixed: OBS overlay now resets cleanly to waiting state when a watch disconnects or Simulator stops, and `/overlay/SIM` works for Simulator targeting
-
-**v1.1.0**
-- Multi-device support & per-device overlay URLs
-- Self-contained and Lite single-file release builds
-
-**v1.0.0**
-- Initial release: single-watch BLE heart rate overlay for OBS
-
----
-
-## Building from Source
-
-Requires **.NET 8 SDK** ([download](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)).
-
-```powershell
-# Debug build + run
-cd HuaweiHROverlay
-dotnet run
-
-# Release self-contained single-file EXE (bundles .NET 8 Desktop Runtime)
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:BuildVariant=full -o ./publish
-
-# Release runtime-dependent single-file EXE (Lite)
-dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:BuildVariant=lite -o ./publish-lite
-```
+Any wearable or chest strap implementing standard **BLE GATT Heart Rate Service (`0x180D` / `0x2A37`)**:
+- Huawei Watch GT2 / GT3 / GT4 / GT5 / GT6 series & Watch Ultimate series
+- Huawei Watch Fit / Fit 2 / Fit 3 / Fit 4 / Fit 5 series
+- Huawei Band 6 / 7 / 8 / 9 / 10 / 11 series
+- Polar H10, Wahoo TICKR, Garmin HRM, Coospo, Magene, and all standard BLE HR straps
 
 ---
 
 ## Architecture
 
-```
+```text
 HuaweiHROverlay/
 ├── Core/
-│   ├── BleHeartRateService.cs   # BLE scanner, multi-device sessions & auto-reconnect
-│   ├── GitHubUpdateService.cs   # GitHub Releases version check, SHA-256 verified download & self-updater
-│   ├── WebSocketServer.cs       # WS broadcast server, per-device subscriptions (port 8765)
-│   ├── HttpOverlayServer.cs     # HTTP server for overlay + telemetry JSON (port 8764)
-│   └── HeartRateReading.cs      # Heart rate & connection event payload
-├── Assets/
-│   ├── overlay.html             # Customizable OBS overlay + real-time ECG renderer (embedded)
-│   └── heart.ico                # App icon
-├── Resources/
-│   └── Styles.xaml              # Telemetry Studio Dark WPF design system
-├── MainWindow.xaml              # Studio control panel & OBS URL builder UI
-└── MainWindow.xaml.cs           # Telemetry state, sparkline renderer & update workflow
+│   ├── Platforms/
+│   │   ├── WindowsBleBackend.cs         # Windows 10/11 WinRT BLE GATT
+│   │   ├── LinuxBlueZBackend.cs         # Linux BlueZ over System D-Bus (Debian/Arch/Fedora)
+│   │   └── MacCoreBluetoothBackend.cs   # macOS CoreBluetooth in-process Objective-C bridge
+│   ├── BleHeartRateService.cs           # Multi-device coordinator + auto-reconnect
+│   ├── GitHubUpdateService.cs           # Multi-OS GitHub Releases SHA-256 updater
+│   ├── HttpOverlayServer.cs             # Embedded overlay + status JSON (port 8764)
+│   ├── WebSocketServer.cs               # Real-time BPM WebSocket server (port 8765)
+│   └── HeartRateReading.cs              # BT SIG 0x2A37 packet parser & JSON payload
+├── Assets/overlay.html                  # Broadcast OBS overlay + 60fps ECG canvas
+├── MainWindow.axaml(.cs)                # Cross-platform Avalonia 11 Studio UI
+└── HeadlessRunner.cs                    # Optional `--headless` terminal mode
+packaging/
+├── linux/ (build-deb.sh, build-rpm.sh, build-tarball.sh, .desktop, icon)
+├── arch/PKGBUILD
+└── macos/ (build-macos-app.sh, Info.plist with NSBluetoothAlwaysUsageDescription)
 ```
+
+---
+
+## Changelog
+
+**v2.0.0**
+- **Cross-Platform Desktop & Native BLE** — full support for **Linux** (`.deb` for Debian/Ubuntu, `.rpm` for Fedora, `PKGBUILD` & `.tar.gz` for Arch via BlueZ D-Bus), **macOS** (`arm64` & `x64` `.dmg` via CoreBluetooth), and **Windows 10/11** (`x64` Full & Lite EXEs via WinRT), powered by Avalonia UI 11
+- **Headless CLI Mode** — added `--headless` (`--scan`, `--device <ID>`, `--simulate`)
+- **Automated Multi-OS CI & Auto-Release** — pushing to `main` automatically builds Windows, Linux, and macOS packages and publishes versioned GitHub Releases with `SHA256SUMS.txt`
+- **Multi-OS GitHub Updater & Impeccable Broadcast Polish** — OS-aware release asset matching, WCAG AA contrast, crisp tabular telemetry numerals, and zero anti-patterns

@@ -1,0 +1,324 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:HuaweiHROverlay"
+        x:Class="HuaweiHROverlay.MainWindow"
+        Title="Huawei HR Overlay"
+        Icon="/Assets/heart.ico"
+        Width="600" Height="810"
+        MinWidth="500" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgDeepBrush}"
+        Foreground="{StaticResource TextPrimaryBrush}">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- ══════ TOP BAR ══════ -->
+        <Border Grid.Row="0" Background="{StaticResource BgSurfaceBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="0,0,0,1" Padding="20,12">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
+                    <Border Width="32" Height="32" CornerRadius="8" Background="#24FF3B5C" BorderBrush="#52FF3B5C" BorderThickness="1">
+                        <Path Data="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+                              Fill="{StaticResource AccentRedBrush}" Stretch="Uniform" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Huawei HR Overlay" FontSize="15" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <Border CornerRadius="5" Background="#1D2234" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" Padding="6,1" VerticalAlignment="Center">
+                                <TextBlock x:Name="VersionBadgeText" Text="v2.0.0" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock x:Name="PlatformSubtitleText" Text="BLE Heart Rate Broadcast Studio for OBS" FontSize="11.5" Foreground="{StaticResource TextMutedBrush}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="4">
+                    <Button x:Name="CheckUpdateButton" Classes="subtle" Content="Check Updates" Click="CheckUpdateButton_Click"/>
+                    <Button Classes="subtle" Content="GitHub" Click="OpenRepo_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ══════ SCROLLABLE STUDIO BODY ══════ -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="20,16" Spacing="14">
+
+                <!-- ══════ GITHUB UPDATE BANNER ══════ -->
+                <Border x:Name="UpdateBannerCard" Classes="accentCard" IsVisible="False">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+                                <Border Background="#33FF3B5C" CornerRadius="5" Padding="7,2">
+                                    <TextBlock Text="New Release" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentRedBrightBrush}"/>
+                                </Border>
+                                <TextBlock x:Name="UpdateTitleText" Text="v2.0.0" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="UpdateMetaText" Text="" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button x:Name="DismissUpdateButton" Grid.Column="1" Classes="subtle" Content="Dismiss" Padding="8,3" Click="DismissUpdate_Click"/>
+                        </Grid>
+
+                        <Border Background="{StaticResource BgInputBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8" Padding="10,8" MaxHeight="92">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <TextBlock x:Name="UpdateNotesText" Text="" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                            </ScrollViewer>
+                        </Border>
+
+                        <StackPanel x:Name="UpdateProgressPanel" IsVisible="False" Spacing="5">
+                            <ProgressBar x:Name="UpdateProgressBar" Minimum="0" Maximum="100" Value="0" Height="7" Foreground="{StaticResource AccentRedBrush}"/>
+                            <TextBlock x:Name="UpdateProgressText" Text="Preparing download…" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="InstallUpdateButton" Classes="primary" Content="Download &amp; Update" Click="InstallUpdateButton_Click"/>
+                            <Button x:Name="CancelUpdateButton" Classes="ghost" Content="Cancel" IsVisible="False" Click="CancelUpdateButton_Click"/>
+                            <Button Classes="secondary" Content="Release Notes" Click="OpenReleasePage_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ══════ LIVE TELEMETRY HERO ══════ -->
+                <Border Classes="card">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Spacing="8">
+                            <TextBlock x:Name="HeroDeviceLabel" Text="Live Heart Rate" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}"/>
+
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="12">
+                                <TextBlock x:Name="LiveBpm" Text="--" FontSize="60" FontWeight="Bold" LineHeight="60" Foreground="#94A3B8"
+                                           FontFamily="Cascadia Mono, JetBrains Mono, Menlo, Consolas, monospace"/>
+                                <StackPanel VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock Text="BPM" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}"/>
+                                    <Border x:Name="ZonePillBorder" CornerRadius="6" Padding="8,3" Background="#1C2030">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Ellipse x:Name="ZoneDot" Width="7" Height="7" Fill="{StaticResource TextMutedBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="ZoneLabel" Text="Waiting for signal" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Session Min / Avg / Peak -->
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                                <Border Background="{StaticResource BgInputBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="6" Padding="8,4">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="MIN" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}"/>
+                                        <TextBlock x:Name="StatMinText" Text="--" FontSize="11.5" FontWeight="Bold"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="{StaticResource BgInputBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="6" Padding="8,4">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="AVG" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}"/>
+                                        <TextBlock x:Name="StatAvgText" Text="--" FontSize="11.5" FontWeight="Bold"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Background="{StaticResource BgInputBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="6" Padding="8,4">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="PEAK" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}"/>
+                                        <TextBlock x:Name="StatMaxText" Text="--" FontSize="11.5" FontWeight="Bold"/>
+                                    </StackPanel>
+                                </Border>
+                                <Button Classes="subtle" Content="Reset" Padding="8,4" FontSize="11.5" Click="ResetStats_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="8">
+                            <Border x:Name="ConnBadge" CornerRadius="11" Padding="10,4" Background="#1F8892AA" HorizontalAlignment="Right">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Ellipse x:Name="ConnDot" Width="7" Height="7" Fill="#94A3B8" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="ConnText" Text="Disconnected" FontSize="11.5" FontWeight="SemiBold" Foreground="#CBD5E1"/>
+                                </StackPanel>
+                            </Border>
+
+                            <ToggleSwitch x:Name="SimMode" OffContent="Simulator Off" OnContent="Simulating"
+                                          HorizontalAlignment="Right" FontSize="12"
+                                          IsCheckedChanged="SimMode_Changed"/>
+
+                            <Border Width="180" Height="56" Background="{StaticResource BgInputBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                                <Grid>
+                                    <TextBlock x:Name="SparklinePlaceholder" Text="BPM history" FontSize="11" Foreground="{StaticResource TextMutedBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Canvas Width="178" Height="54" ClipToBounds="True">
+                                        <Polygon x:Name="SparklineFill" Opacity="0.20" Fill="{StaticResource AccentRedBrush}"/>
+                                        <Polyline x:Name="SparklineStroke" Stroke="{StaticResource AccentRedBrush}" StrokeThickness="1.8"/>
+                                    </Canvas>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- ══════ CONNECTED WATCHES ══════ -->
+                <Border x:Name="ConnectedCard" Classes="card" IsVisible="False">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+                                <TextBlock Text="Connected Watches" FontSize="13.5" FontWeight="Bold"/>
+                                <Border Background="#2222C55E" CornerRadius="5" Padding="6,1" VerticalAlignment="Center">
+                                    <TextBlock x:Name="ConnectedCountText" Text="1" FontSize="11" FontWeight="Bold" Foreground="{StaticResource GreenOkBrush}"/>
+                                </Border>
+                            </StackPanel>
+
+                            <ToggleSwitch x:Name="AutoReconnectCheck" Grid.Column="1" IsChecked="True"
+                                          OffContent="Auto-reconnect Off" OnContent="Auto-reconnect"
+                                          FontSize="12" IsCheckedChanged="AutoReconnect_Changed"/>
+                        </Grid>
+
+                        <ItemsControl x:Name="ConnectedList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="local:ConnectedDeviceVm">
+                                    <Border Background="{StaticResource BgInputBrush}" BorderBrush="{Binding RowBorderBrush}" BorderThickness="1" CornerRadius="9" Padding="12,9" Margin="0,0,0,6"
+                                            PointerPressed="ConnectedRow_PointerPressed" Cursor="Hand">
+                                        <Grid ColumnDefinitions="*,Auto,Auto">
+                                            <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                <StackPanel Orientation="Horizontal" Spacing="7">
+                                                    <Ellipse Width="7" Height="7" Fill="{Binding StateDotBrush}" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis"/>
+                                                    <Border Background="#1E38BDF8" CornerRadius="4" Padding="6,1" IsVisible="{Binding IsHero}">
+                                                        <TextBlock Text="Active" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource BlueInfoBrush}"/>
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding SubtitleText}" FontSize="11" Foreground="{StaticResource TextMutedBrush}" Margin="14,0,0,0"/>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0" Spacing="4">
+                                                <TextBlock Text="{Binding BpmDisplay}" FontSize="18" FontWeight="Bold" Foreground="{Binding BpmBrush}"/>
+                                                <TextBlock Text="BPM" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Bottom" Margin="0,0,0,2"/>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
+                                                <Button Classes="secondary" Content="{Binding CopyButtonLabel}" Padding="10,5" FontSize="11.5" Click="CopyDeviceUrl_Click"/>
+                                                <Button Classes="secondary" Content="Preview" Padding="10,5" FontSize="11.5" Click="PreviewDeviceUrl_Click"/>
+                                                <Button Classes="ghost" Content="Disconnect" Padding="10,5" FontSize="11.5" Click="DisconnectConnected_Click"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- ══════ BLUETOOTH LE SCANNER ══════ -->
+                <Border Classes="card">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="Bluetooth LE Scanner" FontSize="13.5" FontWeight="Bold" VerticalAlignment="Center"/>
+                                    <Ellipse x:Name="ScanningPulseDot" Width="7" Height="7" Fill="{StaticResource GreenOkBrush}" VerticalAlignment="Center" IsVisible="False"/>
+                                </StackPanel>
+                                <TextBlock x:Name="ScanStatus" Text="Enable HR Data Broadcast on your watch, then click Scan."
+                                           FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
+                                <ToggleButton x:Name="HrOnlyFilterCheck" Classes="chip" Content="HR Only" Margin="0"
+                                              IsCheckedChanged="HrOnlyFilter_Changed"/>
+                                <Button x:Name="ScanButton" Classes="secondary" Content="Scan" Padding="14,7" Click="ScanButton_Click"/>
+                                <Button x:Name="StopScanButton" Classes="ghost" Content="Stop" Padding="13,7" Click="StopScanButton_Click" IsEnabled="False"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Border Background="{StaticResource BgInputBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="1" CornerRadius="9" MinHeight="152" MaxHeight="220" ClipToBounds="True">
+                            <Grid>
+                                <ListBox x:Name="DeviceList" Classes="deviceList"
+                                         SelectionChanged="DeviceList_SelectionChanged"
+                                         DoubleTapped="DeviceList_DoubleTapped">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="local:DiscoveredDeviceVm">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <StackPanel VerticalAlignment="Center" Spacing="3">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="13"/>
+                                                        <Border Background="{Binding BadgeBgBrush}" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding BadgeText}" FontSize="11" FontWeight="Bold" Foreground="{Binding BadgeFgBrush}"/>
+                                                        </Border>
+                                                        <Border Background="#2222C55E" CornerRadius="4" Padding="6,1" VerticalAlignment="Center" IsVisible="{Binding IsConnected}">
+                                                            <TextBlock Text="Connected" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource GreenOkBrush}"/>
+                                                        </Border>
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding AddressSubtitle}" FontSize="11" Foreground="{StaticResource TextMutedBrush}"/>
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right" Spacing="2">
+                                                    <TextBlock Text="{Binding SignalLabel}" FontSize="11.5" FontWeight="SemiBold" Foreground="{Binding SignalBrush}" HorizontalAlignment="Right"/>
+                                                    <TextBlock Text="{Binding RssiDisplay}" FontSize="11" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Right"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <!-- Empty / First-Use State -->
+                                <StackPanel x:Name="EmptyScanOverlay" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24,18" Spacing="5">
+                                    <TextBlock x:Name="EmptyScanTitle" Text="Ready to discover watches" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="EmptyScanSubtitle"
+                                               Text="On your Huawei Watch or Band open Settings -> HR Data Broadcasts -> ON, then press Scan."
+                                               FontSize="11.5" Foreground="{StaticResource TextMutedBrush}" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="380"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Button x:Name="ConnectButton" Classes="primary" Content="Connect Watch" IsEnabled="False" Click="ConnectButton_Click"/>
+                            <TextBlock Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" FontSize="11.5" Foreground="{StaticResource TextMutedBrush}"
+                                       Text="Double-click any discovered watch to connect. Connect multiple watches for co-op streams." TextWrapping="Wrap"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ══════ OBS BROWSER SOURCE STUDIO ══════ -->
+                <Border Classes="card">
+                    <StackPanel Spacing="10">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+                                <TextBlock Text="OBS Browser Source Studio" FontSize="13.5" FontWeight="Bold"/>
+                                <Border Background="#1B2234" CornerRadius="5" Padding="7,2" VerticalAlignment="Center">
+                                    <TextBlock x:Name="ObsTargetBadge" Text="All Active Watches" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource BlueInfoBrush}"/>
+                                </Border>
+                            </StackPanel>
+                            <Button x:Name="UseGlobalUrlButton" Grid.Column="1" Classes="subtle" Content="Use Global URL"
+                                    Padding="8,4" IsVisible="False" Click="UseGlobalUrl_Click"/>
+                        </Grid>
+
+                        <WrapPanel>
+                            <RadioButton x:Name="ThemeGlassRadio" Classes="themeChip" Content="Glass Card" GroupName="ObsTheme" IsChecked="True" IsCheckedChanged="ObsOption_Changed"/>
+                            <RadioButton x:Name="ThemeMinimalRadio" Classes="themeChip" Content="Minimal Clean" GroupName="ObsTheme" IsCheckedChanged="ObsOption_Changed"/>
+                            <RadioButton x:Name="ThemeNeonRadio" Classes="themeChip" Content="Neon Frame" GroupName="ObsTheme" IsCheckedChanged="ObsOption_Changed"/>
+                            <RadioButton x:Name="ThemePillRadio" Classes="themeChip" Content="Compact Pill" GroupName="ObsTheme" IsCheckedChanged="ObsOption_Changed"/>
+                        </WrapPanel>
+
+                        <WrapPanel>
+                            <ToggleButton x:Name="OptEcgCheck" Classes="chip" Content="ECG Waveform" IsChecked="True" IsCheckedChanged="ObsOption_Changed"/>
+                            <ToggleButton x:Name="OptZoneCheck" Classes="chip" Content="HR Zone" IsChecked="True" IsCheckedChanged="ObsOption_Changed"/>
+                            <ToggleButton x:Name="OptStatsCheck" Classes="chip" Content="Min / Max" IsCheckedChanged="ObsOption_Changed"/>
+                            <ToggleButton x:Name="OptNameCheck" Classes="chip" Content="Watch Name" IsCheckedChanged="ObsOption_Changed"/>
+                            <ToggleButton x:Name="OptAutoHideCheck" Classes="chip" Content="Auto-hide Offline" IsCheckedChanged="ObsOption_Changed"/>
+                        </WrapPanel>
+
+                        <Grid ColumnDefinitions="*,Auto,Auto">
+                            <TextBox x:Name="OverlayUrlBox" Classes="urlBox" Text="http://localhost:8764/"/>
+                            <Button x:Name="CopyUrlButton" Grid.Column="1" Classes="primary" Content="Copy URL" Margin="8,0,0,0" Click="CopyUrl_Click"/>
+                            <Button Grid.Column="2" Classes="secondary" Content="Preview" Margin="6,0,0,0" Click="OpenBrowser_Click"/>
+                        </Grid>
+
+                        <TextBlock Foreground="{StaticResource TextMutedBrush}" FontSize="11.5" TextWrapping="Wrap"
+                                   Text="OBS setup: Add Browser Source -> Paste URL -> Width 400, Height 120 -> Keep 'Shutdown source when not visible' OFF."/>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ══════ PINNED STATUS FOOTER ══════ -->
+        <Border Grid.Row="2" Background="{StaticResource BgSurfaceBrush}" BorderBrush="{StaticResource BorderSubtleBrush}" BorderThickness="0,1,0,0" Padding="20,9">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock x:Name="StatusBar" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}" Text="Starting local overlay servers…" TextTrimming="CharacterEllipsis"/>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="6" Margin="12,0,0,0">
+                    <Ellipse x:Name="ServerHealthDot" Width="7" Height="7" Fill="{StaticResource GreenOkBrush}" VerticalAlignment="Center"/>
+                    <TextBlock Text="OBS Clients:" FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="WsClientCount" Text="0" FontSize="12" FontWeight="Bold"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

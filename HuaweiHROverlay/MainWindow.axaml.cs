@@ -1,16 +1,16 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Threading;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Media;
+using Avalonia.Threading;
 using HuaweiHROverlay.Core;
 
 namespace HuaweiHROverlay;
 
-/// <summary>ViewModel row for a discovered BLE device in the scanner list.</summary>
 public sealed class DiscoveredDeviceVm : INotifyPropertyChanged
 {
     private BleDeviceInfo _info;
@@ -24,23 +24,28 @@ public sealed class DiscoveredDeviceVm : INotifyPropertyChanged
 
     public string Id => _info.Id;
     public string DisplayName => _info.DisplayName;
-    public bool HasHrService => _info.HasHrService;
     public bool IsLikelyHrWatch => _info.IsLikelyHrWatch;
-    public int Rssi => _info.Rssi;
     public string RssiDisplay => _info.RssiDisplay;
-    public string SignalBarsGlyph => _info.SignalBarsGlyph;
     public string BadgeText => _info.BadgeText;
     public string AddressSubtitle => $"{_info.FormattedAddress}  ·  ID {_info.Id}";
 
-    public Brush BadgeBgBrush => _info.HasHrService
-        ? new SolidColorBrush(Color.FromArgb(0x2E, 0xFF, 0x3B, 0x5C))
+    public string SignalLabel => _info.SignalBars switch
+    {
+        4 => "Strong signal",
+        3 => "Good signal",
+        2 => "Fair signal",
+        _ => "Weak signal"
+    };
+
+    public IBrush BadgeBgBrush => _info.HasHrService
+        ? new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0x3B, 0x5C))
         : new SolidColorBrush(Color.FromRgb(0x1D, 0x22, 0x34));
 
-    public Brush BadgeFgBrush => _info.HasHrService
-        ? new SolidColorBrush(Color.FromRgb(0xFF, 0x7A, 0x93))
-        : new SolidColorBrush(Color.FromRgb(0x8B, 0x93, 0xB0));
+    public IBrush BadgeFgBrush => _info.HasHrService
+        ? new SolidColorBrush(Color.FromRgb(0xFF, 0x85, 0x9B))
+        : new SolidColorBrush(Color.FromRgb(0xB6, 0xC0, 0xD6));
 
-    public Brush SignalBrush => _info.SignalBars switch
+    public IBrush SignalBrush => _info.SignalBars switch
     {
         >= 3 => new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E)),
         2    => new SolidColorBrush(Color.FromRgb(0xFB, 0xBF, 0x24)),
@@ -55,11 +60,8 @@ public sealed class DiscoveredDeviceVm : INotifyPropertyChanged
             if (_isConnected == value) return;
             _isConnected = value;
             Notify(nameof(IsConnected));
-            Notify(nameof(ConnectedPillVisibility));
         }
     }
-
-    public Visibility ConnectedPillVisibility => _isConnected ? Visibility.Visible : Visibility.Collapsed;
 
     public void UpdateFrom(BleDeviceInfo updated, bool isConnected)
     {
@@ -67,19 +69,18 @@ public sealed class DiscoveredDeviceVm : INotifyPropertyChanged
         _isConnected = isConnected;
         Notify(nameof(DisplayName));
         Notify(nameof(RssiDisplay));
-        Notify(nameof(SignalBarsGlyph));
+        Notify(nameof(SignalLabel));
         Notify(nameof(SignalBrush));
         Notify(nameof(BadgeText));
         Notify(nameof(BadgeBgBrush));
         Notify(nameof(BadgeFgBrush));
-        Notify(nameof(ConnectedPillVisibility));
+        Notify(nameof(IsConnected));
     }
 
     private void Notify(string prop) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
     public event PropertyChangedEventHandler? PropertyChanged;
 }
 
-/// <summary>Live row for one connected watch/simulator with per-device telemetry history.</summary>
 public sealed class ConnectedDeviceVm : INotifyPropertyChanged
 {
     private int _bpm;
@@ -135,7 +136,7 @@ public sealed class ConnectedDeviceVm : INotifyPropertyChanged
         set
         {
             _isHero = value;
-            Notify(nameof(HeroTagVisibility));
+            Notify(nameof(IsHero));
             Notify(nameof(RowBorderBrush));
         }
     }
@@ -152,17 +153,15 @@ public sealed class ConnectedDeviceVm : INotifyPropertyChanged
         ? $"ID {Id}  ·  Signal lost — reconnecting…"
         : (IsSimulated ? "Simulated HR stream  ·  ID SIM" : $"ID {Id}  ·  Streaming live");
 
-    public Visibility HeroTagVisibility => _isHero ? Visibility.Visible : Visibility.Collapsed;
+    public IBrush RowBorderBrush => _isHero
+        ? new SolidColorBrush(Color.FromArgb(0x70, 0x38, 0xBD, 0xF8))
+        : new SolidColorBrush(Color.FromRgb(0x24, 0x2A, 0x3E));
 
-    public Brush RowBorderBrush => _isHero
-        ? new SolidColorBrush(Color.FromArgb(0x66, 0x38, 0xBD, 0xF8))
-        : new SolidColorBrush(Color.FromRgb(0x23, 0x28, 0x3B));
-
-    public Brush StateDotBrush => _isReconnecting
+    public IBrush StateDotBrush => _isReconnecting
         ? new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B))
         : new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E));
 
-    public Brush BpmBrush => MainWindow.GetZoneBrush(_bpm);
+    public IBrush BpmBrush => MainWindow.GetZoneBrush(_bpm);
 
     public void ResetStats()
     {
@@ -189,14 +188,12 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<DiscoveredDeviceVm> _visibleDevices = [];
     private readonly ObservableCollection<ConnectedDeviceVm> _connected = [];
     private ConnectedDeviceVm? _heroDevice;
-    private string? _obsTargetDeviceId; // null = global URL, non-null = locked to one device
+    private string? _obsTargetDeviceId;
 
-    // GitHub Update State
     private UpdateCheckResult? _latestUpdate;
     private CancellationTokenSource? _downloadCts;
     private bool _isApplyingUpdate;
 
-    // Simulator State
     private const string SimDeviceId = "SIM";
     private DispatcherTimer? _simTimer;
     private readonly Random _rng = new();
@@ -209,13 +206,11 @@ public partial class MainWindow : Window
         VersionBadgeText.Text = $"v{GitHubUpdateService.GetCurrentVersionString()}";
         DeviceList.ItemsSource = _visibleDevices;
         ConnectedList.ItemsSource = _connected;
-        Loaded += OnLoaded;
+        Opened += OnOpened;
         Closing += OnClosing;
     }
 
-    // ── Startup ───────────────────────────────────────────────────────────
-
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    private async void OnOpened(object? sender, EventArgs e)
     {
         var startupErrors = new List<string>();
 
@@ -223,7 +218,7 @@ public partial class MainWindow : Window
         {
             _wsServer = new WebSocketServer();
             _wsServer.ClientCountChanged += (_, count) =>
-                Dispatcher.Invoke(() => WsClientCount.Text = count.ToString());
+                Dispatcher.UIThread.Post(() => WsClientCount.Text = count.ToString());
             _wsServer.Start();
         }
         catch (Exception ex)
@@ -243,10 +238,24 @@ public partial class MainWindow : Window
             startupErrors.Add($"HTTP :{HttpOverlayServer.Port} ({ex.Message})");
         }
 
+        _ble = new BleHeartRateService
+        {
+            AutoReconnect = AutoReconnectCheck.IsChecked == true
+        };
+        PlatformSubtitleText.Text = $"OBS Broadcast Studio  ·  {_ble.PlatformBackendName}";
+
+        _ble.HeartRateChanged += (_, r) => Dispatcher.UIThread.Post(() => OnHeartRateChanged(r));
+        _ble.DeviceDiscovered += (_, info) => Dispatcher.UIThread.Post(() => OnDeviceDiscovered(info));
+        _ble.StatusChanged += (_, msg) => Dispatcher.UIThread.Post(() => SetStatus(msg));
+        _ble.SessionAdded += (_, s) => Dispatcher.UIThread.Post(() => OnSessionAdded(s));
+        _ble.SessionRemoved += (_, s) => Dispatcher.UIThread.Post(() => OnSessionRemoved(s.DeviceId, s.DeviceName));
+        _ble.SessionReconnectStateChanged += (_, st) => Dispatcher.UIThread.Post(() => OnSessionReconnectChanged(st));
+        _ble.ScanningStoppedUnexpectedly += (_, _) => Dispatcher.UIThread.Post(OnScanStoppedUnexpectedly);
+
         if (startupErrors.Count == 0)
         {
             ServerHealthDot.Fill = new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E));
-            SetStatus($"Ready — HTTP :8764 & WebSocket :8765 active.");
+            SetStatus($"Ready — HTTP :8764 & WebSocket :8765 active ({_ble.PlatformBackendName}).");
         }
         else
         {
@@ -254,28 +263,15 @@ public partial class MainWindow : Window
             SetStatus("Port conflict: " + string.Join("; ", startupErrors));
         }
 
-        _ble = new BleHeartRateService
-        {
-            AutoReconnect = AutoReconnectCheck.IsChecked == true
-        };
-        _ble.HeartRateChanged += OnHeartRateChanged;
-        _ble.DeviceDiscovered += OnDeviceDiscovered;
-        _ble.StatusChanged += (_, msg) => Dispatcher.Invoke(() => SetStatus(msg));
-        _ble.SessionAdded += (_, s) => Dispatcher.Invoke(() => OnSessionAdded(s));
-        _ble.SessionRemoved += (_, info) => Dispatcher.Invoke(() => OnSessionRemoved(info.DeviceId, info.DeviceName));
-        _ble.SessionReconnectStateChanged += (_, state) => Dispatcher.Invoke(() => OnSessionReconnectChanged(state));
-        _ble.ScanningStoppedUnexpectedly += (_, _) => Dispatcher.Invoke(OnScanStoppedUnexpectedly);
-
         RefreshObsUrlBox();
 
-        // Silent non-blocking update check shortly after startup
         await Task.Delay(1500);
         await CheckForUpdatesInternalAsync(userInitiated: false);
     }
 
-    // ── GitHub Update Workflow ────────────────────────────────────────────
+    // ── GitHub Updater ────────────────────────────────────────────────────
 
-    private async void CheckUpdateButton_Click(object sender, RoutedEventArgs e)
+    private async void CheckUpdateButton_Click(object? sender, RoutedEventArgs e)
     {
         await CheckForUpdatesInternalAsync(userInitiated: true);
     }
@@ -298,16 +294,16 @@ public partial class MainWindow : Window
             }
             else
             {
-                CheckUpdateButton.Content = "✓ Up to date";
+                CheckUpdateButton.Content = "Up to date";
                 if (userInitiated)
-                    SetStatus($"You are running the latest version (v{result.CurrentVersion}).");
+                    SetStatus($"Running latest version (v{result.CurrentVersion}).");
 
                 _ = ResetUpdateButtonLabelLaterAsync();
             }
         }
         catch (Exception ex)
         {
-            CheckUpdateButton.Content = "↻  Check Updates";
+            CheckUpdateButton.Content = "Check Updates";
             if (userInitiated)
                 SetStatus($"Update check failed: {ex.Message}");
         }
@@ -321,7 +317,7 @@ public partial class MainWindow : Window
     {
         await Task.Delay(3500);
         if (_latestUpdate is not { IsUpdateAvailable: true })
-            CheckUpdateButton.Content = "↻  Check Updates";
+            CheckUpdateButton.Content = "Check Updates";
     }
 
     private void ShowUpdateBanner(UpdateCheckResult result)
@@ -329,24 +325,21 @@ public partial class MainWindow : Window
         UpdateTitleText.Text = $"v{result.LatestVersion}";
         if (result.SelectedAsset != null)
         {
-            string variantLabel = result.DetectedVariant == AppBuildVariant.Lite ? "Lite build" : "Self-contained";
-            string verifyTag = !string.IsNullOrEmpty(result.SelectedAsset.Sha256Hex) ? " · SHA-256 verified" : "";
-            UpdateMetaText.Text = $"{variantLabel} · {result.SelectedAsset.SizeDisplay}{verifyTag}";
-            InstallUpdateButton.Content = $"⬇  Update to v{result.LatestVersion} & Restart";
-            InstallUpdateButton.IsEnabled = true;
+            string shaBadge = !string.IsNullOrEmpty(result.SelectedAsset.Sha256Hex) ? " · SHA-256" : "";
+            UpdateMetaText.Text = $"{result.VariantDisplay} · {result.SelectedAsset.SizeDisplay}{shaBadge}";
+            InstallUpdateButton.Content = $"Update to v{result.LatestVersion}";
         }
         else
         {
-            UpdateMetaText.Text = "Manual download on GitHub";
-            InstallUpdateButton.Content = "Open GitHub Releases ↗";
-            InstallUpdateButton.IsEnabled = true;
+            UpdateMetaText.Text = "Available on GitHub Releases";
+            InstallUpdateButton.Content = "Open GitHub Releases";
         }
 
         UpdateNotesText.Text = result.ReleaseNotes;
-        UpdateBannerCard.Visibility = Visibility.Visible;
+        UpdateBannerCard.IsVisible = true;
     }
 
-    private async void InstallUpdateButton_Click(object sender, RoutedEventArgs e)
+    private async void InstallUpdateButton_Click(object? sender, RoutedEventArgs e)
     {
         if (_latestUpdate == null) return;
         if (_latestUpdate.SelectedAsset == null)
@@ -360,8 +353,8 @@ public partial class MainWindow : Window
 
         InstallUpdateButton.IsEnabled = false;
         DismissUpdateButton.IsEnabled = false;
-        CancelUpdateButton.Visibility = Visibility.Visible;
-        UpdateProgressPanel.Visibility = Visibility.Visible;
+        CancelUpdateButton.IsVisible = true;
+        UpdateProgressPanel.IsVisible = true;
         UpdateProgressBar.Value = 0;
         UpdateProgressText.Text = $"Connecting to GitHub ({_latestUpdate.SelectedAsset.Name})…";
 
@@ -378,15 +371,16 @@ public partial class MainWindow : Window
                 _latestUpdate.SelectedAsset, progress, _downloadCts.Token);
 
             UpdateProgressBar.Value = 100;
-            UpdateProgressText.Text = "Checksum verified — restarting into new version…";
+            UpdateProgressText.Text = "Checksum verified — applying update…";
 
-            var (launched, msg) = GitHubUpdateService.LaunchSelfUpdate(stagedPath);
+            var (shouldExit, msg) = GitHubUpdateService.LaunchSelfUpdate(stagedPath);
             SetStatus(msg);
+            UpdateProgressText.Text = msg;
 
-            if (launched)
+            if (shouldExit)
             {
                 _isApplyingUpdate = true;
-                Application.Current.Shutdown();
+                Close();
                 return;
             }
         }
@@ -394,15 +388,6 @@ public partial class MainWindow : Window
         {
             UpdateProgressText.Text = "Update download cancelled.";
             SetStatus("Update download cancelled.");
-        }
-        catch (ComponentModelWin32CanceledException)
-        {
-            UpdateProgressText.Text = "Administrator permission was declined.";
-        }
-        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
-        {
-            UpdateProgressText.Text = "Administrator permission was cancelled.";
-            SetStatus("Update cancelled at elevation prompt.");
         }
         catch (Exception ex)
         {
@@ -415,36 +400,19 @@ public partial class MainWindow : Window
             {
                 InstallUpdateButton.IsEnabled = true;
                 DismissUpdateButton.IsEnabled = true;
-                CancelUpdateButton.Visibility = Visibility.Collapsed;
+                CancelUpdateButton.IsVisible = false;
             }
         }
     }
 
-    private void CancelUpdateButton_Click(object sender, RoutedEventArgs e)
-    {
-        _downloadCts?.Cancel();
-    }
-
-    private void DismissUpdate_Click(object sender, RoutedEventArgs e)
-    {
-        UpdateBannerCard.Visibility = Visibility.Collapsed;
-    }
-
-    private void OpenReleasePage_Click(object sender, RoutedEventArgs e)
-    {
-        OpenUrl(_latestUpdate?.HtmlUrl ?? GitHubUpdateService.ReleasesPageUrl);
-    }
-
-    private void OpenRepo_Click(object sender, RoutedEventArgs e)
-    {
-        OpenUrl($"https://github.com/{GitHubUpdateService.RepoOwner}/{GitHubUpdateService.RepoName}");
-    }
-
-    private sealed class ComponentModelWin32CanceledException : Exception;
+    private void CancelUpdateButton_Click(object? sender, RoutedEventArgs e) => _downloadCts?.Cancel();
+    private void DismissUpdate_Click(object? sender, RoutedEventArgs e) => UpdateBannerCard.IsVisible = false;
+    private void OpenReleasePage_Click(object? sender, RoutedEventArgs e) => OpenUrl(_latestUpdate?.HtmlUrl ?? GitHubUpdateService.ReleasesPageUrl);
+    private void OpenRepo_Click(object? sender, RoutedEventArgs e) => OpenUrl($"https://github.com/{GitHubUpdateService.RepoOwner}/{GitHubUpdateService.RepoName}");
 
     // ── BLE & Telemetry Events ────────────────────────────────────────────
 
-    private void OnHeartRateChanged(object? sender, HeartRateReading reading)
+    private void OnHeartRateChanged(HeartRateReading reading)
     {
         var vm = _connected.FirstOrDefault(c => c.Id == reading.DeviceId);
         if (vm != null)
@@ -459,33 +427,28 @@ public partial class MainWindow : Window
         _ = _wsServer?.BroadcastAsync(reading.DeviceId, reading.ToJson());
     }
 
-    private void OnDeviceDiscovered(object? sender, BleDeviceInfo info)
+    private void OnDeviceDiscovered(BleDeviceInfo info)
     {
-        Dispatcher.Invoke(() =>
+        bool connected = _ble?.IsConnectedOrReconnecting(info.Id) ?? false;
+        var existing = _allDiscovered.FirstOrDefault(d => d.Id == info.Id);
+        if (existing != null)
         {
-            bool connected = _ble?.IsConnectedOrReconnecting(info.Id) ?? false;
-            var existing = _allDiscovered.FirstOrDefault(d => d.Id == info.Id);
-            if (existing != null)
+            existing.UpdateFrom(info, connected);
+        }
+        else
+        {
+            var vm = new DiscoveredDeviceVm(info, connected);
+            if (vm.IsLikelyHrWatch)
             {
-                existing.UpdateFrom(info, connected);
+                int insertAt = _allDiscovered.TakeWhile(d => d.IsLikelyHrWatch).Count();
+                _allDiscovered.Insert(insertAt, vm);
             }
             else
             {
-                var vm = new DiscoveredDeviceVm(info, connected);
-                // Insert HR/Watch candidates near top while keeping existing selection stable
-                if (vm.IsLikelyHrWatch)
-                {
-                    int insertAt = _allDiscovered.TakeWhile(d => d.IsLikelyHrWatch).Count();
-                    _allDiscovered.Insert(insertAt, vm);
-                }
-                else
-                {
-                    _allDiscovered.Add(vm);
-                }
+                _allDiscovered.Add(vm);
             }
-
-            RebuildVisibleDeviceList();
-        });
+        }
+        RebuildVisibleDeviceList();
     }
 
     private void RebuildVisibleDeviceList()
@@ -516,31 +479,31 @@ public partial class MainWindow : Window
     {
         if (_visibleDevices.Count > 0)
         {
-            EmptyScanOverlay.Visibility = Visibility.Collapsed;
+            EmptyScanOverlay.IsVisible = false;
             return;
         }
 
-        EmptyScanOverlay.Visibility = Visibility.Visible;
+        EmptyScanOverlay.IsVisible = true;
         if (_ble?.IsScanning == true)
         {
             EmptyScanTitle.Text = HrOnlyFilterCheck.IsChecked == true
                 ? "Scanning for Heart Rate wearables…"
                 : "Scanning nearby Bluetooth LE devices…";
-            EmptyScanSubtitle.Text = "Keep your watch awake with Settings → HR Data Broadcasts enabled.";
+            EmptyScanSubtitle.Text = "Keep your watch screen awake with Settings -> HR Data Broadcasts enabled.";
         }
         else if (_allDiscovered.Count > 0 && HrOnlyFilterCheck.IsChecked == true)
         {
             EmptyScanTitle.Text = "No HR wearables matched filter";
-            EmptyScanSubtitle.Text = "Uncheck 'HR Only' to inspect all nearby Bluetooth LE devices.";
+            EmptyScanSubtitle.Text = "Uncheck 'HR Only' to inspect all discovered Bluetooth LE devices.";
         }
         else
         {
             EmptyScanTitle.Text = "Ready to discover watches";
-            EmptyScanSubtitle.Text = "On your Huawei Watch/Band open Settings → HR Data Broadcasts → ON, then press Scan.";
+            EmptyScanSubtitle.Text = "On your Huawei Watch or Band open Settings -> HR Data Broadcasts -> ON, then press Scan.";
         }
     }
 
-    private void OnSessionAdded(BleDeviceSession session)
+    private void OnSessionAdded(BleDeviceSessionInfo session)
     {
         var vm = _connected.FirstOrDefault(c => c.Id == session.DeviceId);
         if (vm == null)
@@ -610,60 +573,56 @@ public partial class MainWindow : Window
     private void RefreshConnectedCardVisibility()
     {
         ConnectedCountText.Text = _connected.Count.ToString();
-        ConnectedCard.Visibility = _connected.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ConnectedCard.IsVisible = _connected.Count > 0;
     }
 
     private void OnScanStoppedUnexpectedly()
     {
         ScanButton.IsEnabled = true;
         StopScanButton.IsEnabled = false;
-        ScanningPulseDot.Visibility = Visibility.Collapsed;
-        ScanStatus.Text = "Bluetooth scan stopped unexpectedly. Click Scan to retry.";
+        ScanningPulseDot.IsVisible = false;
         UpdateEmptyScanState();
     }
 
-    // ── Scanner & Connection Actions ──────────────────────────────────────
+    // ── Scanner & Connection Handlers ─────────────────────────────────────
 
-    private void ScanButton_Click(object sender, RoutedEventArgs e)
+    private async void ScanButton_Click(object? sender, RoutedEventArgs e)
     {
+        if (_ble == null) return;
         _allDiscovered.Clear();
         _visibleDevices.Clear();
-        _ble?.StartScanning();
         ScanButton.IsEnabled = false;
         StopScanButton.IsEnabled = true;
-        ScanningPulseDot.Visibility = Visibility.Visible;
-        ScanStatus.Text = "Scanning… (ensure HR Data Broadcast is enabled on watch)";
+        ScanningPulseDot.IsVisible = true;
+        ScanStatus.Text = $"Scanning via {_ble.PlatformBackendName}…";
         UpdateEmptyScanState();
+
+        await _ble.StartScanningAsync();
+        if (!_ble.IsScanning)
+            OnScanStoppedUnexpectedly();
     }
 
-    private void StopScanButton_Click(object sender, RoutedEventArgs e)
+    private async void StopScanButton_Click(object? sender, RoutedEventArgs e)
     {
-        _ble?.StopScanning();
+        if (_ble != null) await _ble.StopScanningAsync();
         ScanButton.IsEnabled = true;
         StopScanButton.IsEnabled = false;
-        ScanningPulseDot.Visibility = Visibility.Collapsed;
+        ScanningPulseDot.IsVisible = false;
         ScanStatus.Text = $"Scan paused. {_visibleDevices.Count} device(s) listed.";
         UpdateEmptyScanState();
     }
 
-    private void HrOnlyFilter_Changed(object sender, RoutedEventArgs e)
-    {
-        if (!IsLoaded) return;
-        RebuildVisibleDeviceList();
-    }
+    private void HrOnlyFilter_Changed(object? sender, RoutedEventArgs e) => RebuildVisibleDeviceList();
 
-    private void AutoReconnect_Changed(object sender, RoutedEventArgs e)
+    private void AutoReconnect_Changed(object? sender, RoutedEventArgs e)
     {
         if (_ble != null)
             _ble.AutoReconnect = AutoReconnectCheck.IsChecked == true;
     }
 
-    private void DeviceList_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        UpdateConnectButtonState();
-    }
+    private void DeviceList_SelectionChanged(object? sender, SelectionChangedEventArgs e) => UpdateConnectButtonState();
 
-    private async void DeviceList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    private async void DeviceList_DoubleTapped(object? sender, TappedEventArgs e)
     {
         if (DeviceList.SelectedItem is DiscoveredDeviceVm vm && !vm.IsConnected)
             await ConnectSelectedDeviceAsync(vm);
@@ -674,16 +633,16 @@ public partial class MainWindow : Window
         if (DeviceList.SelectedItem is not DiscoveredDeviceVm selected)
         {
             ConnectButton.IsEnabled = false;
-            ConnectButton.Content = "⚡  Connect Watch";
+            ConnectButton.Content = "Connect Watch";
             return;
         }
 
         bool already = _ble?.IsConnectedOrReconnecting(selected.Id) ?? false;
         ConnectButton.IsEnabled = !already;
-        ConnectButton.Content = already ? "✓  Connected" : "⚡  Connect Watch";
+        ConnectButton.Content = already ? "Connected" : "Connect Watch";
     }
 
-    private async void ConnectButton_Click(object sender, RoutedEventArgs e)
+    private async void ConnectButton_Click(object? sender, RoutedEventArgs e)
     {
         if (DeviceList.SelectedItem is DiscoveredDeviceVm device)
             await ConnectSelectedDeviceAsync(device);
@@ -700,47 +659,47 @@ public partial class MainWindow : Window
         bool ok = await _ble.ConnectAsync(device.Id, device.DisplayName);
 
         SetStatus(ok
-            ? $"✓ {device.DisplayName} streaming live ({_connected.Count} active)."
+            ? $"{device.DisplayName} streaming live ({_connected.Count} active)."
             : $"Could not connect to {device.DisplayName}. Verify HR Data Broadcast is ON.");
         SyncDiscoveredConnectionStates();
         UpdateConnectButtonState();
     }
 
-    private void ConnectedRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void ConnectedRow_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is not ConnectedDeviceVm vm) return;
+        if ((sender as StyledElement)?.DataContext is not ConnectedDeviceVm vm) return;
         SetHeroDevice(vm);
         _obsTargetDeviceId = _connected.Count > 1 ? vm.Id : _obsTargetDeviceId;
         RefreshObsUrlBox();
     }
 
-    private async void CopyDeviceUrl_Click(object sender, RoutedEventArgs e)
+    private async void CopyDeviceUrl_Click(object? sender, RoutedEventArgs e)
     {
         e.Handled = true;
-        if ((sender as FrameworkElement)?.DataContext is not ConnectedDeviceVm vm) return;
+        if ((sender as StyledElement)?.DataContext is not ConnectedDeviceVm vm) return;
 
         _obsTargetDeviceId = vm.Id;
         RefreshObsUrlBox();
         string url = BuildOverlayUrl(vm.Id);
-        Clipboard.SetText(url);
+        await CopyTextToClipboardAsync(url);
         SetStatus($"Copied OBS URL for {vm.Name}: {url}");
 
-        vm.CopyButtonLabel = "✓ Copied";
+        vm.CopyButtonLabel = "Copied";
         await Task.Delay(1600);
         vm.CopyButtonLabel = "Copy URL";
     }
 
-    private void PreviewDeviceUrl_Click(object sender, RoutedEventArgs e)
+    private void PreviewDeviceUrl_Click(object? sender, RoutedEventArgs e)
     {
         e.Handled = true;
-        if ((sender as FrameworkElement)?.DataContext is not ConnectedDeviceVm vm) return;
+        if ((sender as StyledElement)?.DataContext is not ConnectedDeviceVm vm) return;
         OpenUrl(BuildOverlayUrl(vm.Id));
     }
 
-    private async void DisconnectConnected_Click(object sender, RoutedEventArgs e)
+    private async void DisconnectConnected_Click(object? sender, RoutedEventArgs e)
     {
         e.Handled = true;
-        if ((sender as FrameworkElement)?.DataContext is not ConnectedDeviceVm vm) return;
+        if ((sender as StyledElement)?.DataContext is not ConnectedDeviceVm vm) return;
 
         if (vm.Id == SimDeviceId)
         {
@@ -754,13 +713,9 @@ public partial class MainWindow : Window
 
     // ── OBS Studio Overlay URL Builder ────────────────────────────────────
 
-    private void ObsOption_Changed(object sender, RoutedEventArgs e)
-    {
-        if (!IsLoaded) return;
-        RefreshObsUrlBox();
-    }
+    private void ObsOption_Changed(object? sender, RoutedEventArgs e) => RefreshObsUrlBox();
 
-    private void UseGlobalUrl_Click(object sender, RoutedEventArgs e)
+    private void UseGlobalUrl_Click(object? sender, RoutedEventArgs e)
     {
         _obsTargetDeviceId = null;
         RefreshObsUrlBox();
@@ -774,13 +729,13 @@ public partial class MainWindow : Window
         if (_obsTargetDeviceId != null)
         {
             var vm = _connected.FirstOrDefault(c => c.Id == _obsTargetDeviceId);
-            ObsTargetBadge.Text = $"Target: {vm?.Name ?? _obsTargetDeviceId}";
-            UseGlobalUrlButton.Visibility = Visibility.Visible;
+            ObsTargetBadge.Text = $"Locked: {vm?.Name ?? _obsTargetDeviceId}";
+            UseGlobalUrlButton.IsVisible = true;
         }
         else
         {
-            ObsTargetBadge.Text = "Target: Any Active Watch";
-            UseGlobalUrlButton.Visibility = Visibility.Collapsed;
+            ObsTargetBadge.Text = "All Active Watches";
+            UseGlobalUrlButton.IsVisible = false;
         }
     }
 
@@ -792,65 +747,71 @@ public partial class MainWindow : Window
 
         var query = new List<string>();
 
-        if (ThemeMinimalRadio.IsChecked == true) query.Add("theme=minimal");
-        else if (ThemeNeonRadio.IsChecked == true) query.Add("theme=neon");
-        else if (ThemePillRadio.IsChecked == true) query.Add("theme=pill");
+        if (ThemeMinimalRadio?.IsChecked == true) query.Add("theme=minimal");
+        else if (ThemeNeonRadio?.IsChecked == true) query.Add("theme=neon");
+        else if (ThemePillRadio?.IsChecked == true) query.Add("theme=pill");
 
-        if (OptEcgCheck.IsChecked == false) query.Add("ecg=0");
-        if (OptZoneCheck.IsChecked == false) query.Add("zone=0");
-        if (OptStatsCheck.IsChecked == true) query.Add("stats=1");
-        if (OptNameCheck.IsChecked == true) query.Add("name=1");
-        if (OptAutoHideCheck.IsChecked == true) query.Add("autohide=1");
+        if (OptEcgCheck?.IsChecked == false) query.Add("ecg=0");
+        if (OptZoneCheck?.IsChecked == false) query.Add("zone=0");
+        if (OptStatsCheck?.IsChecked == true) query.Add("stats=1");
+        if (OptNameCheck?.IsChecked == true) query.Add("name=1");
+        if (OptAutoHideCheck?.IsChecked == true) query.Add("autohide=1");
 
         return query.Count == 0 ? basePath : $"{basePath}?{string.Join("&", query)}";
     }
 
-    private async void CopyUrl_Click(object sender, RoutedEventArgs e)
+    private async void CopyUrl_Click(object? sender, RoutedEventArgs e)
     {
-        Clipboard.SetText(OverlayUrlBox.Text);
+        await CopyTextToClipboardAsync(OverlayUrlBox.Text ?? "");
         SetStatus("OBS Browser Source URL copied to clipboard.");
 
-        CopyUrlButton.Content = "✓  Copied!";
+        CopyUrlButton.Content = "Copied";
         await Task.Delay(1700);
         CopyUrlButton.Content = "Copy URL";
     }
 
-    private void OpenBrowser_Click(object sender, RoutedEventArgs e)
+    private void OpenBrowser_Click(object? sender, RoutedEventArgs e) => OpenUrl(OverlayUrlBox.Text ?? "");
+
+    private async Task CopyTextToClipboardAsync(string text)
     {
-        OpenUrl(OverlayUrlBox.Text);
+        var clipboard = GetTopLevel(this)?.Clipboard;
+        if (clipboard != null)
+            await clipboard.SetTextAsync(text);
     }
 
     // ── Simulator ─────────────────────────────────────────────────────────
 
-    private void SimMode_Checked(object sender, RoutedEventArgs e)
+    private void SimMode_Changed(object? sender, RoutedEventArgs e)
     {
-        _simTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(950) };
-        _simTimer.Tick += SimTick;
-        _simTimer.Start();
-
-        var vm = _connected.FirstOrDefault(c => c.Id == SimDeviceId);
-        if (vm == null)
+        if (SimMode.IsChecked == true)
         {
-            vm = new ConnectedDeviceVm { Id = SimDeviceId, Name = "Simulator", IsSimulated = true };
-            _connected.Add(vm);
+            _simTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(950) };
+            _simTimer.Tick += SimTick;
+            _simTimer.Start();
+
+            var vm = _connected.FirstOrDefault(c => c.Id == SimDeviceId);
+            if (vm == null)
+            {
+                vm = new ConnectedDeviceVm { Id = SimDeviceId, Name = "Simulator", IsSimulated = true };
+                _connected.Add(vm);
+            }
+
+            if (_heroDevice == null)
+                SetHeroDevice(vm);
+            else
+                UpdateHeaderConnectionBadge();
+
+            RefreshConnectedCardVisibility();
+            SimTick(this, EventArgs.Empty);
+            SetStatus("Simulator active — streaming synthetic BPM telemetry to OBS.");
         }
-
-        if (_heroDevice == null)
-            SetHeroDevice(vm);
         else
-            UpdateHeaderConnectionBadge();
-
-        RefreshConnectedCardVisibility();
-        SimTick(this, EventArgs.Empty);
-        SetStatus("Simulator active — streaming synthetic BPM telemetry to OBS.");
-    }
-
-    private void SimMode_Unchecked(object sender, RoutedEventArgs e)
-    {
-        _simTimer?.Stop();
-        _simTimer = null;
-        OnSessionRemoved(SimDeviceId, "Simulator");
-        SetStatus("Simulator stopped.");
+        {
+            _simTimer?.Stop();
+            _simTimer = null;
+            OnSessionRemoved(SimDeviceId, "Simulator");
+            SetStatus("Simulator stopped.");
+        }
     }
 
     private void SimTick(object? sender, EventArgs e)
@@ -869,7 +830,7 @@ public partial class MainWindow : Window
             new HeartRateReading { Bpm = _simBpm, Connected = true, DeviceId = SimDeviceId, DeviceName = "Simulator" }.ToJson());
     }
 
-    // ── Hero Telemetry & Sparkline Rendering ──────────────────────────────
+    // ── Hero Telemetry & Sparkline ────────────────────────────────────────
 
     private void SetHeroDevice(ConnectedDeviceVm? vm)
     {
@@ -881,7 +842,7 @@ public partial class MainWindow : Window
         RefreshHeroTelemetry();
     }
 
-    private void ResetStats_Click(object sender, RoutedEventArgs e)
+    private void ResetStats_Click(object? sender, RoutedEventArgs e)
     {
         _heroDevice?.ResetStats();
         RefreshHeroTelemetry();
@@ -891,12 +852,12 @@ public partial class MainWindow : Window
     {
         if (_heroDevice == null)
         {
-            HeroDeviceLabel.Text = "NO ACTIVE WATCH";
+            HeroDeviceLabel.Text = "Live Heart Rate";
             LiveBpm.Text = "--";
-            LiveBpm.Foreground = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B));
+            LiveBpm.Foreground = new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8));
             ZoneLabel.Text = "Waiting for signal";
-            ZoneLabel.Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x93, 0xB0));
-            ZoneDot.Fill = new SolidColorBrush(Color.FromRgb(0x5B, 0x62, 0x7E));
+            ZoneLabel.Foreground = new SolidColorBrush(Color.FromRgb(0xB6, 0xC0, 0xD6));
+            ZoneDot.Fill = new SolidColorBrush(Color.FromRgb(0x88, 0x93, 0xAD));
             ZonePillBorder.Background = new SolidColorBrush(Color.FromRgb(0x1C, 0x20, 0x30));
             StatMinText.Text = "--";
             StatAvgText.Text = "--";
@@ -906,8 +867,8 @@ public partial class MainWindow : Window
         }
 
         HeroDeviceLabel.Text = _heroDevice.IsReconnecting
-            ? $"RECONNECTING  ·  {_heroDevice.Name.ToUpperInvariant()}"
-            : $"LIVE TELEMETRY  ·  {_heroDevice.Name.ToUpperInvariant()}";
+            ? $"{_heroDevice.Name} (Reconnecting…)"
+            : _heroDevice.Name;
 
         int bpm = _heroDevice.Bpm;
         StatMinText.Text = _heroDevice.MinBpm > 0 ? _heroDevice.MinBpm.ToString() : "--";
@@ -932,7 +893,7 @@ public partial class MainWindow : Window
         ZoneLabel.Text = zoneName;
         ZoneLabel.Foreground = zoneBrush;
         ZoneDot.Fill = zoneBrush;
-        ZonePillBorder.Background = new SolidColorBrush(Color.FromArgb(0x22, zoneColor.R, zoneColor.G, zoneColor.B));
+        ZonePillBorder.Background = new SolidColorBrush(Color.FromArgb(0x24, zoneColor.R, zoneColor.G, zoneColor.B));
 
         RenderSparkline(_heroDevice.History, zoneColor);
     }
@@ -941,26 +902,23 @@ public partial class MainWindow : Window
     {
         if (values == null || values.Count < 2)
         {
-            SparklineStroke.Points.Clear();
-            SparklineFill.Points.Clear();
-            SparklinePlaceholder.Visibility = Visibility.Visible;
+            SparklineStroke.Points = new List<Point>();
+            SparklineFill.Points = new List<Point>();
+            SparklinePlaceholder.IsVisible = true;
             return;
         }
 
-        SparklinePlaceholder.Visibility = Visibility.Collapsed;
+        SparklinePlaceholder.IsVisible = false;
 
-        const double width = 176.0;
+        const double width = 178.0;
         const double height = 54.0;
         const double padY = 7.0;
 
         int min = Math.Max(40, values.Min() - 6);
         int max = Math.Max(min + 12, values.Max() + 6);
 
-        var strokePts = new PointCollection(values.Count);
-        var fillPts = new PointCollection(values.Count + 2)
-        {
-            new Point(0, height)
-        };
+        var strokePts = new List<Point>(values.Count);
+        var fillPts = new List<Point>(values.Count + 2) { new(0, height) };
 
         for (int i = 0; i < values.Count; i++)
         {
@@ -983,32 +941,31 @@ public partial class MainWindow : Window
 
     internal static (string Name, Color Color) GetZoneDetails(int bpm) => bpm switch
     {
-        <= 0  => ("No signal",     Color.FromRgb(0x8B, 0x93, 0xB0)),
+        <= 0  => ("No signal",     Color.FromRgb(0x94, 0xA3, 0xB8)),
         < 100 => ("Rest Zone",     Color.FromRgb(0x38, 0xBD, 0xF8)),
         < 130 => ("Fat Burn Zone", Color.FromRgb(0x34, 0xD3, 0x99)),
         < 160 => ("Cardio Zone",   Color.FromRgb(0xFB, 0xBF, 0x24)),
-        _     => ("Peak Zone",     Color.FromRgb(0xFF, 0x3B, 0x5C))
+        _     => ("Peak Zone",     Color.FromRgb(0xFF, 0x47, 0x66))
     };
 
-    internal static Brush GetZoneBrush(int bpm) =>
+    internal static IBrush GetZoneBrush(int bpm) =>
         new SolidColorBrush(GetZoneDetails(bpm).Color);
 
     private void UpdateHeaderConnectionBadge()
     {
         if (_connected.Count == 0)
         {
-            SetBadge(Color.FromRgb(0x88, 0x92, 0xAA), "Disconnected");
+            SetBadge(Color.FromRgb(0x94, 0xA3, 0xB8), "Disconnected");
             return;
         }
 
-        if (_connected.Any(c => c.IsReconnecting) && _connected.All(c => c.IsReconnecting))
+        if (_connected.All(c => c.IsReconnecting))
         {
             SetBadge(Color.FromRgb(0xF5, 0x9E, 0x0B), "Reconnecting…");
             return;
         }
 
-        bool allSim = _connected.All(c => c.IsSimulated);
-        if (allSim)
+        if (_connected.All(c => c.IsSimulated))
         {
             SetBadge(Color.FromRgb(0xFB, 0xBF, 0x24), "Simulating");
             return;
@@ -1024,23 +981,27 @@ public partial class MainWindow : Window
         ConnDot.Fill = fg;
         ConnText.Text = text;
         ConnText.Foreground = fg;
-        ConnBadge.Background = new SolidColorBrush(Color.FromArgb(0x24, c.R, c.G, c.B));
+        ConnBadge.Background = new SolidColorBrush(Color.FromArgb(0x26, c.R, c.G, c.B));
     }
 
     private void SetStatus(string msg) => StatusBar.Text = msg;
 
     private static void OpenUrl(string url)
     {
+        if (string.IsNullOrWhiteSpace(url)) return;
         try
         {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            if (OperatingSystem.IsWindows())
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            else if (OperatingSystem.IsMacOS())
+                Process.Start(new ProcessStartInfo("open", $"\"{url}\"") { UseShellExecute = false });
+            else
+                Process.Start(new ProcessStartInfo("xdg-open", $"\"{url}\"") { UseShellExecute = false });
         }
-        catch { /* ignore if default browser fails */ }
+        catch { }
     }
 
-    // ── Cleanup ───────────────────────────────────────────────────────────
-
-    private async void OnClosing(object? sender, CancelEventArgs e)
+    private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
         _downloadCts?.Cancel();
         _simTimer?.Stop();

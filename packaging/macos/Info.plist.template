@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Huawei HR Overlay</string>
+    <key>CFBundleDisplayName</key>
+    <string>Huawei HR Overlay</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.fishuvn.huaweihroverlay</string>
+    <key>CFBundleVersion</key>
+    <string>__VERSION__</string>
+    <key>CFBundleShortVersionString</key>
+    <string>__VERSION__</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleExecutable</key>
+    <string>HuaweiHROverlay</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Huawei HR Overlay connects to your Bluetooth LE watch or heart rate monitor to stream live BPM to OBS Studio.</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>Huawei HR Overlay connects to your Bluetooth LE watch or heart rate monitor to stream live BPM to OBS Studio.</string>
+</dict>
+</plist>

@@ -1,43 +1,108 @@
-name: Release
+name: CI & Auto Release
 
 on:
   push:
+    branches:
+      - main
     tags:
-      - "v*.*.*"   # Triggers on version tags: v1.2.0, v1.2.1, etc.
-
-  # Allow manual run from GitHub Actions UI (for testing)
+      - "v*.*.*"
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Publish GitHub Release after build succeeds"
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: ci-release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
-  contents: write   # Required to create GitHub Releases and upload assets
+  contents: write
 
 jobs:
-  build-and-release:
-    name: Build & Publish Release
-    runs-on: windows-latest
-
+  # ── 1. Resolve Semantic Version & Release Gate ───────────────────────────
+  resolve-version:
+    name: Resolve Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      should_release: ${{ steps.meta.outputs.should_release }}
     steps:
-      # ── 1. Checkout ────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version and release gate
+        id: meta
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          DISPATCH_RELEASE: ${{ inputs.publish_release }}
+        run: |
+          set -euo pipefail
+
+          CSPROJ_VER=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' HuaweiHROverlay/HuaweiHROverlay.csproj | head -n 1 | tr -d '[:space:]')
+          if [[ -z "$CSPROJ_VER" ]]; then CSPROJ_VER="2.0.0"; fi
+
+          SHOULD_RELEASE="false"
+          VER="$CSPROJ_VER"
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            SHOULD_RELEASE="false"
+          elif [[ "$REF" == refs/tags/v* ]]; then
+            VER="${REF_NAME#v}"
+            SHOULD_RELEASE="true"
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" && "$DISPATCH_RELEASE" == "false" ]]; then
+            SHOULD_RELEASE="false"
+          elif [[ "$COMMIT_MSG" == *"[skip release]"* ]]; then
+            SHOULD_RELEASE="false"
+          else
+            SHOULD_RELEASE="true"
+            if git rev-parse "v${VER}" >/dev/null 2>&1; then
+              MAJOR_MINOR="${VER%.*}"
+              MAX_PATCH=$(git tag -l "v${MAJOR_MINOR}.*" | sed -E "s/^v${MAJOR_MINOR//./\\.}\.([0-9]+).*$/\1/" | sort -n | tail -n 1)
+              if [[ -z "$MAX_PATCH" ]]; then MAX_PATCH=0; fi
+              NEXT_PATCH=$((MAX_PATCH + 1))
+              VER="${MAJOR_MINOR}.${NEXT_PATCH}"
+            fi
+          fi
+
+          TAG="v${VER}"
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "should_release=${SHOULD_RELEASE}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${VER} (tag: ${TAG}, should_release: ${SHOULD_RELEASE})"
+
+  # ── 2. Build Windows (Full & Lite Single-File EXEs) ──────────────────────
+  build-windows:
+    name: Build Windows (x64)
+    needs: resolve-version
+    runs-on: windows-latest
+    steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Setup .NET 8 SDK ────────────────────────────────────
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
 
-      # ── 3. Publish self-contained single-file EXE (bundles .NET 8 runtime) ──
-      - name: Publish Self-contained EXE
+      - name: Publish Windows Full & Lite EXEs
         shell: pwsh
         run: |
-          if (Test-Path "./publish") { Remove-Item -Recurse -Force ./publish }
-
-          $tag = "${{ github.ref_name }}"
-          $verArg = @()
-          if ($tag -match '^v(\d+\.\d+\.\d+)') {
-            $verArg = @("-p:Version=$($Matches[1])")
-          }
+          $ver = "${{ needs.resolve-version.outputs.version }}"
+          $tag = "${{ needs.resolve-version.outputs.tag }}"
+          New-Item -ItemType Directory -Force -Path ./dist-windows | Out-Null
 
           dotnet publish HuaweiHROverlay/HuaweiHROverlay.csproj `
             -c Release `
@@ -46,23 +111,8 @@ jobs:
             -p:PublishSingleFile=true `
             -p:IncludeNativeLibrariesForSelfExtract=true `
             -p:BuildVariant=full `
-            @verArg `
-            -o ./publish
-
-          Write-Host "--- Publish output ---"
-          Get-ChildItem ./publish | Select-Object Name, @{N='MB';E={[math]::Round($_.Length/1MB,2)}}
-
-      # ── 4. Publish runtime-dependent single-file EXE (needs .NET 8 Desktop Runtime) ──
-      - name: Publish Runtime-dependent EXE
-        shell: pwsh
-        run: |
-          if (Test-Path "./publish-lite") { Remove-Item -Recurse -Force ./publish-lite }
-
-          $tag = "${{ github.ref_name }}"
-          $verArg = @()
-          if ($tag -match '^v(\d+\.\d+\.\d+)') {
-            $verArg = @("-p:Version=$($Matches[1])")
-          }
+            -p:Version=$ver `
+            -o ./publish-win-full
 
           dotnet publish HuaweiHROverlay/HuaweiHROverlay.csproj `
             -c Release `
@@ -71,83 +121,170 @@ jobs:
             -p:PublishSingleFile=true `
             -p:IncludeNativeLibrariesForSelfExtract=true `
             -p:BuildVariant=lite `
-            @verArg `
-            -o ./publish-lite
+            -p:Version=$ver `
+            -o ./publish-win-lite
 
-          Write-Host "--- Publish-lite output ---"
-          Get-ChildItem ./publish-lite | Select-Object Name, @{N='MB';E={[math]::Round($_.Length/1MB,2)}}
+          Move-Item ./publish-win-full/HuaweiHROverlay.exe "./dist-windows/HuaweiHROverlay-$tag-win-x64.exe" -Force
+          Move-Item ./publish-win-lite/HuaweiHROverlay.exe "./dist-windows/HuaweiHROverlay-$tag-win-x64-lite.exe" -Force
+          Get-ChildItem ./dist-windows | Select-Object Name, @{N='MB';E={[math]::Round($_.Length/1MB,2)}}
 
-      # ── 5. Rename EXEs with version ───────────────────────────
-      - name: Rename EXEs with version
-        shell: pwsh
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows
+          path: ./dist-windows/*
+          if-no-files-found: error
+
+  # ── 3. Build Linux (Debian .deb, Fedora .rpm, Arch/Portable .tar.gz) ─────
+  build-linux:
+    name: Build Linux (Debian, Fedora, Arch)
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install RPM packaging tools
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish & Package Linux Bundles
+        shell: bash
         run: |
-          $tag = "${{ github.ref_name }}"
-          if ($tag -eq "") { $tag = "dev" }
+          set -euo pipefail
+          VER="${{ needs.resolve-version.outputs.version }}"
+          mkdir -p ./dist-linux
 
-          $fullSrc = (Resolve-Path "publish/HuaweiHROverlay.exe").Path
-          $liteSrc = (Resolve-Path "publish-lite/HuaweiHROverlay.exe").Path
-          $fullDst = Join-Path (Split-Path $fullSrc) "HuaweiHROverlay-$tag-win-x64.exe"
-          $liteDst = Join-Path (Split-Path $liteSrc) "HuaweiHROverlay-$tag-win-x64-lite.exe"
+          dotnet publish HuaweiHROverlay/HuaweiHROverlay.csproj \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:Version="$VER" \
+            -o ./publish-linux
 
-          if (-not (Test-Path $fullSrc)) { Write-Error "EXE not found: $fullSrc"; exit 1 }
-          if (-not (Test-Path $liteSrc)) { Write-Error "EXE not found: $liteSrc"; exit 1 }
+          chmod +x ./publish-linux/HuaweiHROverlay
+          ./publish-linux/HuaweiHROverlay --version
 
-          Move-Item -Path $fullSrc -Destination $fullDst -Force
-          Move-Item -Path $liteSrc -Destination $liteDst -Force
-          Write-Host "OK: $(Split-Path $fullDst -Leaf)  ($([math]::Round((Get-Item $fullDst).Length/1MB,1)) MB)"
-          Write-Host "OK: $(Split-Path $liteDst -Leaf)  ($([math]::Round((Get-Item $liteDst).Length/1MB,1)) MB)"
+          chmod +x packaging/linux/*.sh
+          ./packaging/linux/build-deb.sh "$VER" ./publish-linux/HuaweiHROverlay ./dist-linux
+          ./packaging/linux/build-rpm.sh "$VER" ./publish-linux/HuaweiHROverlay ./dist-linux
+          ./packaging/linux/build-tarball.sh "$VER" ./publish-linux/HuaweiHROverlay ./dist-linux
 
-          "RELEASE_FILE=$fullDst" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "RELEASE_NAME=HuaweiHROverlay-$tag-win-x64.exe" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "LITE_FILE=$liteDst" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "LITE_NAME=HuaweiHROverlay-$tag-win-x64-lite.exe" | Out-File -FilePath $env:GITHUB_ENV -Append
+          sed "s/^pkgver=.*/pkgver=${VER}/" packaging/arch/PKGBUILD > ./dist-linux/PKGBUILD
+          ls -lh ./dist-linux
 
-      # ── 6. Create GitHub Release (only on real version tags) ──
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux
+          path: ./dist-linux/*
+          if-no-files-found: error
+
+  # ── 4. Build macOS (Apple Silicon arm64 & Intel x64 DMGs) ────────────────
+  build-macos:
+    name: Build macOS (arm64 & x64)
+    needs: resolve-version
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish & Package macOS App Bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${{ needs.resolve-version.outputs.version }}"
+          mkdir -p ./dist-macos
+          chmod +x packaging/macos/*.sh
+
+          dotnet publish HuaweiHROverlay/HuaweiHROverlay.csproj \
+            -c Release \
+            -r osx-arm64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:Version="$VER" \
+            -o ./publish-macos-arm64
+
+          ./publish-macos-arm64/HuaweiHROverlay --version
+          ./packaging/macos/build-macos-app.sh "$VER" arm64 ./publish-macos-arm64 ./dist-macos
+
+          dotnet publish HuaweiHROverlay/HuaweiHROverlay.csproj \
+            -c Release \
+            -r osx-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:Version="$VER" \
+            -o ./publish-macos-x64
+
+          ./packaging/macos/build-macos-app.sh "$VER" x64 ./publish-macos-x64 ./dist-macos
+          ls -lh ./dist-macos
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-macos
+          path: ./dist-macos/*
+          if-no-files-found: error
+
+  # ── 5. Automatic GitHub Release ──────────────────────────────────────────
+  publish-release:
+    name: Auto Publish GitHub Release
+    needs:
+      - resolve-version
+      - build-windows
+      - build-linux
+      - build-macos
+    if: needs.resolve-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./release-assets
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS.txt
+        run: |
+          cd ./release-assets
+          sha256sum HuaweiHROverlay-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "Huawei HR Overlay ${{ github.ref_name }}"
+          tag_name: ${{ needs.resolve-version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: "Huawei HR Overlay ${{ needs.resolve-version.outputs.tag }}"
+          generate_release_notes: true
           body: |
-            ## What's New in ${{ github.ref_name }}
+            ## Downloads for ${{ needs.resolve-version.outputs.tag }}
 
-            ### ✅ Two downloads — pick one
+            | Platform | Package | Notes |
+            |----------|---------|-------|
+            | **Windows 10/11 (Recommended)** | `HuaweiHROverlay-${{ needs.resolve-version.outputs.tag }}-win-x64.exe` | Self-contained single EXE — just download and run |
+            | **Windows 10/11 (Lite)** | `HuaweiHROverlay-${{ needs.resolve-version.outputs.tag }}-win-x64-lite.exe` | Smaller EXE for machines with .NET 8 Runtime |
+            | **Debian / Ubuntu / Mint** | `HuaweiHROverlay-${{ needs.resolve-version.outputs.tag }}-linux-x64.deb` | `sudo apt install ./HuaweiHROverlay-${{ needs.resolve-version.outputs.tag }}-linux-x64.deb` |
+            | **Fedora / RHEL / Nobara** | `HuaweiHROverlay-${{ needs.resolve-version.outputs.tag }}-linux-x64.rpm` | `sudo dnf install ./HuaweiHROverlay-${{ needs.resolve-version.outputs.tag }}-linux-x64.rpm` |
+            | **Arch Linux / Portable Linux** | `HuaweiHROverlay-${{ needs.resolve-version.outputs.tag }}-linux-x64.tar.gz` & `PKGBUILD` | Extract & run `./install.sh`, or `makepkg -si` with `PKGBUILD` |
+            | **macOS (Apple Silicon M1–M4)** | `HuaweiHROverlay-${{ needs.resolve-version.outputs.tag }}-macos-arm64.dmg` | Drag `Huawei HR Overlay.app` to Applications |
+            | **macOS (Intel)** | `HuaweiHROverlay-${{ needs.resolve-version.outputs.tag }}-macos-x64.dmg` | Drag `Huawei HR Overlay.app` to Applications |
 
-            | File | Size | For |
-            |------|------|-----|
-            | `HuaweiHROverlay-${{ github.ref_name }}-win-x64.exe` | ~180 MB | **Most users** — .NET 8 Desktop Runtime included, just download and run |
-            | `HuaweiHROverlay-${{ github.ref_name }}-win-x64-lite.exe` | ~25 MB | Machines that already have the .NET 8 Desktop Runtime |
-
-            ### 🚀 Quick Start
-            1. Enable **HR Data Broadcasts** on your Huawei watch: `Settings → HR Data Broadcasts → ON`
-            2. Run the EXE
-            3. Click **▶ Scan**, double-click your watch (or click **⚡ Connect Watch**) — repeat for more watches
-            4. Customize your theme in **OBS Browser Source Studio**, click **Copy URL**, and paste into an OBS **Browser Source** (400 × 120 px)
-
-            **Requires a Bluetooth 5.0+ adapter** (built into most modern PCs/dongles).
-
-            ### 📋 Changelog
-
-            **v1.2.0**
-            - **In-app GitHub Updater** — automatic & manual update checks via GitHub Releases, matching Full/Lite build detection, SHA-256 verification, and 1-click download & restart
-            - **Redesigned Telemetry Studio UI** — resizable dark interface, live BPM trend sparkline, session Min/Avg/Peak stats, HR-only scanner filter, signal quality bars, and per-device 1-click URL copy
-            - **OBS Overlay Studio & Themes** — crisp vector heart + real-time P-QRS-T ECG waveform canvas, 4 built-in themes (`glass`, `minimal`, `neon`, `pill`), optional Min/Max, watch name, and auto-hide when offline
-            - **BLE Auto-Reconnect** — automatically recovers connection if your watch briefly steps out of Bluetooth range
-
-            **v1.1.0**
-            - **Multi-device support** — connect multiple watches/bands at the same time, each with its own overlay
-            - **Per-device overlay URLs** — `http://localhost:8764/overlay/<DEVICE-ID>`
-            - **Self-contained & Lite release builds**
-
-            **v1.0.0**
-            - Initial release: single-watch BLE heart rate overlay for OBS
-
-            ---
-            *Full setup guide: [README](https://github.com/${{ github.repository }}/blob/main/README.md)*
+            > **macOS Gatekeeper note:** Because builds are open-source and ad-hoc signed without a paid Apple Developer ID, run `xattr -cr "/Applications/Huawei HR Overlay.app"` once if macOS blocks first launch.
           files: |
-            ${{ env.RELEASE_FILE }}
-            ${{ env.LITE_FILE }}
+            ./release-assets/*
           draft: false
           prerelease: false
         env:

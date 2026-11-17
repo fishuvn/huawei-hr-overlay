@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Huawei HR Overlay
+GenericName=Heart Rate OBS Overlay
+Comment=Real-time Bluetooth LE Heart Rate Broadcast Studio for OBS
+Exec=/usr/bin/huawei-hr-overlay
+Icon=huawei-hr-overlay
+Terminal=false
+Categories=AudioVideo;Video;Recorder;Utility;
+Keywords=OBS;HeartRate;Huawei;Bluetooth;Stream;Overlay;
+StartupWMClass=HuaweiHROverlay
